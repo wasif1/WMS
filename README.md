@@ -19,6 +19,9 @@ npm run dev                        # UI on :5173 (proxies /api)
 ```
 Requires Node ≥ 22.13 (uses the built-in `node:sqlite`).
 
+## Try it online (GitHub Pages demo)
+`.github/workflows/pages.yml` publishes a **demo build** to `https://<owner>.github.io/<repo>/`. GitHub Pages is static hosting, so the demo uses an in-browser fake backend (`src/lib/demo.ts`) with sample data kept in your browser's localStorage. It is for testing the UI and flows only: no real security, no encryption, no backups. Demo logins are shown on the sign-in page. Real use needs the Node server below. Build locally with `npm run build:demo`.
+
 ## Run (production)
 ```bash
 npm run build                      # builds ./dist, served by the API on the same origin

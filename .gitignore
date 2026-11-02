@@ -10,3 +10,5 @@ server/data
 *.db-shm
 *.enc
 *.key
+
+!.env.demo
