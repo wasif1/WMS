@@ -4,6 +4,7 @@ import { Archive, ArrowLeftRight, BarChart3, Boxes, ClipboardCheck, DatabaseBack
 import { useAuth } from '@/auth/AuthContext'
 import { cn } from '@/lib/utils'
 import ThemeToggle from './ThemeToggle'
+import { DEMO } from '@/lib/api'
 
 interface Item { to: string; label: string; icon: LucideIcon; perms: string[]; superOnly?: boolean }
 const groups: { title: string; items: Item[] }[] = [
@@ -73,6 +74,7 @@ export default function Layout() {
           <button className="btn-ghost !p-2" onClick={() => setOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
           <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />WMS</span><span className="ml-auto"><ThemeToggle /></span>
         </header>
+        {DEMO && <div className="bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800">Demo mode: fake data in your browser only. Not the secure production backend.</div>}
         <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
       </div>
     </div>

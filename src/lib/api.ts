@@ -8,7 +8,13 @@ export const setCsrf = (t: string) => { csrf = t }
 let onUnauthorized: (() => void) | null = null
 export const setUnauthorizedHandler = (fn: () => void) => { onUnauthorized = fn }
 
+export const DEMO = import.meta.env.VITE_DEMO === 'true'
+
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  if (DEMO) {
+    try { return (await (await import('./demo')).demoHandle(method, path, body)) as T }
+    catch (e) { if (e instanceof ApiError && e.status === 401 && !path.startsWith('/auth/login')) onUnauthorized?.(); throw e }
+  }
   const res = await fetch(`/api${path}`, {
     method,
     credentials: 'same-origin',

@@ -3,6 +3,7 @@ import { PackageCheck } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { ErrorBox, Field, Spinner } from '@/components/ui'
 import ThemeToggle from '@/components/ThemeToggle'
+import { DEMO } from '@/lib/api'
 
 export default function Login() {
   const { login, loginMfa } = useAuth()
@@ -29,6 +30,15 @@ export default function Login() {
           <ErrorBox error={err} />
           <button className="btn-primary w-full" disabled={busy}>{busy && <Spinner />}{mfaToken ? 'Verify' : 'Sign in'}</button>
         </form>
+        {DEMO && (
+          <div className="card mt-4 space-y-2 p-4 text-xs">
+            <p className="font-semibold text-slate-700">Demo mode - fake data stored only in your browser</p>
+            <p className="text-slate-500">Password for all: <code className="rounded bg-slate-100 px-1">Demo-Passw0rd-2026</code></p>
+            {[['super@demo.test', 'Super admin - everything'], ['manager@demo.test', 'Manager - approves, sees real clients'], ['operator@demo.test', 'Operator - stock in / out'], ['dashboard@demo.test', 'Dashboard only']].map(([e, d]) => (
+              <button key={e} type="button" className="flex w-full justify-between rounded px-2 py-1 text-left hover:bg-slate-100" onClick={() => { setEmail(e); setPassword('Demo-Passw0rd-2026') }}><span className="font-mono">{e}</span><span className="text-slate-500">{d}</span></button>
+            ))}
+          </div>
+        )}
         <p className="mt-4 text-center text-xs text-slate-400">Protected system. All activity is logged.</p>
         <div className="mt-2 flex justify-center"><ThemeToggle /></div>
       </div>
