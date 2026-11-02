@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PackageCheck } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { ErrorBox, Field, Spinner } from '@/components/ui'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default function Login() {
   const { login, loginMfa } = useAuth()
@@ -29,6 +30,7 @@ export default function Login() {
           <button className="btn-primary w-full" disabled={busy}>{busy && <Spinner />}{mfaToken ? 'Verify' : 'Sign in'}</button>
         </form>
         <p className="mt-4 text-center text-xs text-slate-400">Protected system. All activity is logged.</p>
+        <div className="mt-2 flex justify-center"><ThemeToggle /></div>
       </div>
     </div>
   )

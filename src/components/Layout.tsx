@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Archive, ArrowLeftRight, BarChart3, Boxes, ClipboardCheck, DatabaseBackup, Download, EyeOff, FileText, LayoutDashboard, LogOut, Menu, PackageCheck, PackageMinus, ScrollText, Settings2, ShieldCheck, SlidersHorizontal, Users, Warehouse, type LucideIcon } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { cn } from '@/lib/utils'
+import ThemeToggle from './ThemeToggle'
 
 interface Item { to: string; label: string; icon: LucideIcon; perms: string[]; superOnly?: boolean }
 const groups: { title: string; items: Item[] }[] = [
@@ -62,14 +63,15 @@ export default function Layout() {
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">{user?.name.slice(0, 1).toUpperCase()}</div>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{user?.name}</p><p className="flex items-center gap-1 text-xs text-slate-500">{user?.role === 'super_admin' ? <ShieldCheck className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}{user?.role.replace('_', ' ')}</p></div>
           </NavLink>
-          <button className="btn-ghost mt-1 w-full justify-start" onClick={logout}><LogOut className="h-4 w-4" />Sign out</button>
+          <ThemeToggle className="mt-1 w-full justify-start" />
+          <button className="btn-ghost w-full justify-start" onClick={logout}><LogOut className="h-4 w-4" />Sign out</button>
         </div>
       </aside>
       {open && <div className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)} />}
       <div className="min-w-0 flex-1">
         <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:hidden">
           <button className="btn-ghost !p-2" onClick={() => setOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
-          <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />WMS</span>
+          <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />WMS</span><span className="ml-auto"><ThemeToggle /></span>
         </header>
         <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
       </div>
