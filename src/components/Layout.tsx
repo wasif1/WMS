@@ -1,0 +1,82 @@
+import { useState } from 'react'
+import { NavLink, Outlet } from 'react-router-dom'
+import { Archive, ArrowLeftRight, BarChart3, Boxes, ClipboardCheck, DatabaseBackup, Download, EyeOff, FileText, LayoutDashboard, LogOut, Menu, PackageCheck, PackageMinus, ScrollText, Settings2, ShieldCheck, SlidersHorizontal, Users, Warehouse, type LucideIcon } from 'lucide-react'
+import { useAuth } from '@/auth/AuthContext'
+import { cn } from '@/lib/utils'
+import ThemeToggle from './ThemeToggle'
+import { DEMO } from '@/lib/api'
+
+interface Item { to: string; label: string; icon: LucideIcon; perms: string[]; superOnly?: boolean }
+const groups: { title: string; items: Item[] }[] = [
+  { title: 'Overview', items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, perms: ['dashboard.view'] }] },
+  { title: 'Inventory', items: [
+    { to: '/products', label: 'Products', icon: Boxes, perms: ['products.view'] },
+    { to: '/locations', label: 'Locations', icon: Warehouse, perms: ['locations.view', 'locations.manage'] },
+    { to: '/adjustments', label: 'Adjustments', icon: SlidersHorizontal, perms: ['adjustments.view', 'adjustments.create'] },
+    { to: '/audits', label: 'Inventory audits', icon: ClipboardCheck, perms: ['audits.view', 'audits.create'] },
+  ] },
+  { title: 'Orders', items: [
+    { to: '/inbound', label: 'Inbound', icon: Download, perms: ['inbound.view', 'inbound.create'] },
+    { to: '/transfers', label: 'Transfers', icon: ArrowLeftRight, perms: ['transfers.view', 'transfers.create'] },
+    { to: '/reserves', label: 'Reserved', icon: Archive, perms: ['reserves.view', 'reserves.create'] },
+    { to: '/outbound', label: 'Outbound', icon: PackageMinus, perms: ['outbound.view', 'outbound.create'] },
+  ] },
+  { title: 'Insights', items: [
+    { to: '/reports', label: 'Reports', icon: BarChart3, perms: ['reports.inventory', 'reports.orders'] },
+    { to: '/clients', label: 'Clients', icon: EyeOff, perms: ['clients.view', 'clients.manage', 'clients.reveal'] },
+  ] },
+  { title: 'Administration', items: [
+    { to: '/users', label: 'Users & access', icon: Users, perms: [], superOnly: true },
+    { to: '/backups', label: 'Backups & settings', icon: DatabaseBackup, perms: [], superOnly: true },
+    { to: '/logs', label: 'Activity log', icon: ScrollText, perms: ['logs.view'] },
+  ] },
+]
+
+export default function Layout() {
+  const { user, can, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const visible = (i: Item) => (i.superOnly ? user?.role === 'super_admin' : can(...i.perms))
+  return (
+    <div className="min-h-screen lg:flex">
+      <aside className={cn('fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}>
+        <div className="flex h-16 items-center gap-2.5 border-b border-slate-100 px-5">
+          <div className="rounded-lg bg-brand-600 p-1.5 text-white"><PackageCheck className="h-5 w-5" /></div>
+          <div><p className="text-sm font-semibold leading-none">WMS</p><p className="mt-1 text-[11px] text-slate-500">Warehouse Management</p></div>
+        </div>
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4" onClick={() => setOpen(false)}>
+          {groups.map((g) => {
+            const items = g.items.filter(visible)
+            if (!items.length) return null
+            return (
+              <div key={g.title}>
+                <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</p>
+                {items.map((i) => (
+                  <NavLink key={i.to} to={i.to} end={i.to === '/'} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium', isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100')}>
+                    <i.icon className="h-4 w-4" />{i.label}
+                  </NavLink>
+                ))}
+              </div>
+            )
+          })}
+        </nav>
+        <div className="border-t border-slate-100 p-3">
+          <NavLink to="/account" className="flex items-center gap-3 rounded-lg p-2 hover:bg-slate-100">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">{user?.name.slice(0, 1).toUpperCase()}</div>
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{user?.name}</p><p className="flex items-center gap-1 text-xs text-slate-500">{user?.role === 'super_admin' ? <ShieldCheck className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}{user?.role.replace('_', ' ')}</p></div>
+          </NavLink>
+          <ThemeToggle className="mt-1 w-full justify-start" />
+          <button className="btn-ghost w-full justify-start" onClick={logout}><LogOut className="h-4 w-4" />Sign out</button>
+        </div>
+      </aside>
+      {open && <div className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)} />}
+      <div className="min-w-0 flex-1">
+        <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:hidden">
+          <button className="btn-ghost !p-2" onClick={() => setOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+          <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />WMS</span><span className="ml-auto"><ThemeToggle /></span>
+        </header>
+        {DEMO && <div className="bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800">Demo mode: fake data in your browser only. Not the secure production backend.</div>}
+        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
+      </div>
+    </div>
+  )
+}
