@@ -11,3 +11,13 @@ describe('utils', () => {
     expect(toPayload([{ productId: '', cases: 1, loose: 1 }, { productId: 2, cases: 1, loose: 0 }])).toEqual([{ productId: 2, cases: 1, loose: 0 }])
   })
 })
+
+import { productLabel, variationOf } from './catalog'
+describe('catalog labels', () => {
+  it('builds "name - colour · size" and never needs the SKU', () => {
+    expect(productLabel({ name: 'Cotton T-Shirt', color: 'Black', size: 'L', sku: 'X' })).toBe('Cotton T-Shirt - Black · L')
+    expect(variationOf({ color: 'Silver' })).toBe('Silver')
+    expect(productLabel({ sku: 'PRD-0001' })).toBe('PRD-0001')
+    expect(productLabel({})).toBe('Unnamed product')
+  })
+})

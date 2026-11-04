@@ -10,8 +10,9 @@ import { fmtDate } from '@/lib/utils'
 const PRESETS: { name: string; desc: string; role: 'admin' | 'user'; perms: (all: PermDef[]) => string[] }[] = [
   { name: 'Dashboard only', desc: 'Sees KPIs, nothing else', role: 'user', perms: () => ['dashboard.view'] },
   { name: 'Viewer', desc: 'Read-only access to inventory & orders', role: 'user', perms: (a) => a.map((p) => p.key).filter((k) => k.endsWith('.view') && k !== 'logs.view') },
-  { name: 'Warehouse operator', desc: 'Receive, transfer, reserve, count', role: 'user', perms: () => ['dashboard.view', 'products.view', 'locations.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'audits.view', 'audits.count', 'clients.view'] },
-  { name: 'Manager', desc: 'Everything except real client data & logs', role: 'admin', perms: (a) => a.map((p) => p.key).filter((k) => !['clients.reveal', 'logs.view'].includes(k)) },
+  { name: 'Warehouse operator', desc: 'Receive, transfer, reserve, count', role: 'user', perms: () => ['dashboard.view', 'products.view', 'locations.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'audits.view', 'audits.count', 'clients.view', 'adjustments.create', 'adjustments.view', 'products.create', 'locations.manage'] },
+  { name: 'Manager', desc: 'Everything except owner approvals, real client data & logs', role: 'admin', perms: (a) => a.map((p) => p.key).filter((k) => !['clients.reveal', 'logs.view', 'approvals.manage'].includes(k)) },
+  { name: 'Owner (approver)', desc: 'Reviews & approves products, locations, adjustments, audits', role: 'admin', perms: () => ['approvals.manage', 'dashboard.view', 'products.view', 'locations.view', 'adjustments.view', 'audits.view', 'reports.inventory', 'reports.orders'] },
 ]
 
 export default function UsersPage() {

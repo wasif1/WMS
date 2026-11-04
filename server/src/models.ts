@@ -27,19 +27,22 @@ export interface Session {
   ua?: string
 }
 
-export interface Location { id: number; name: string; address: string; active: boolean; createdAt: string }
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+/** Everything the team submits (product, location, adjustment, audit) is reviewed by the owner before it goes live. */
+export interface ApprovalInfo { status?: ApprovalStatus; submittedBy?: Actor; decidedBy?: Actor; decisionComment?: string }
 
-export interface Product {
+export interface Location extends ApprovalInfo { id: number; name: string; address: string; active: boolean; createdAt: string }
+
+export interface Product extends ApprovalInfo {
   id: number
-  sku: string
-  name: string
-  description: string
+  sku: string // generated, for records & analysis only
+  name?: string
+  description?: string
   color?: string
-  weight?: string // variation label e.g. "500g"
-  unitWeightKg: number
-  boxWeightKg: number
-  caseSize: number // units per case
-  uom: 'unit' | 'kg'
+  size?: string
+  weight?: string // free text as measured, e.g. "500g", "1.5 kg"
+  caseSize?: number // units per case/box; optional (some products arrive loose)
+  uom: 'unit' | 'kg' | 'm' | 'bundle' // how this product is actually measured
   reorderLevel: number
   active: boolean
   createdAt: string

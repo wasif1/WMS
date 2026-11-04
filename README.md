@@ -5,7 +5,13 @@ React 18 + TypeScript + Vite frontend, Node (Express + TypeScript) API, SQLite s
 ## Features
 Products (auto-SKU with colour/weight variations, case packs) · Locations · **Inbound** (packing list → verify → second-person approval → email) · **Transfers** (draft → in transit → received, receiver logged) · **Reserved** orders (hold stock; convert to outbound with the actual-vs-reserved difference recorded) · **Outbound** (save → review/edit → confirm) · Adjustments · Inventory audits (differences in red, summary email) · Product pages with movement history · Inventory & order reports (CSV) · KPI dashboard · Activity log · Backups.
 
-**Access control:** a super admin grants each user an exact set of permissions (29 fine-grained rights plus presets). A user can have only `dashboard.view` and see nothing else. Changes apply immediately (the user's sessions are revoked).
+**Owner approval:** the team can *submit* new products, new locations, inventory adjustments and completed audits, but nothing goes live (no product in the list, no published location, no stock change) until the owner (anyone holding `approvals.manage`) reviews and approves it on the **Approvals** page. Owners' own submissions are approved immediately. Audits show the owner counted vs system differences before inventory is updated.
+
+**Dashboard:** order data (Inbound, Outbound, Reserved, Pending, Transfers, Completed) with weekly / monthly / yearly filters, top products *by orders*, and a "no sales in 30 days" insight.
+
+**Products:** no field is mandatory; one weight field; case pack optional; measured by units, kg, metres or bundles. Staff search products by name + variation (colour/size), never by SKU.
+
+**Access control:** a super admin grants each user an exact set of permissions (30 fine-grained rights plus presets). A user can have only `dashboard.view` and see nothing else. Changes apply immediately (the user's sessions are revoked).
 
 **Client privacy:** clients appear as *Client A, Client B…*. Real name/contact/address are only returned by the API to users holding `clients.reveal` (also applied to reports and CSV exports). Reveals are logged.
 
@@ -51,4 +57,8 @@ NODE_ENV=production npm start      # put it behind HTTPS (nginx/Caddy); cookies 
 * **Which schedule is best?** With 3 copies kept, *daily* gives 3 days of history, *weekly* 3 weeks, *monthly* 3 months. For an operational WMS we recommend **daily** (loss ≤ 24 h) plus copying the files off-site; raise `WMS_BACKUP_KEEP` for longer history. Test a restore regularly.
 
 ## Tests
+* `server/tests/review.test.ts`: regression tests, one block per review comment (approvals, dashboard, product form/list/detail, movement history).
+* `server/tests/pentest.test.ts`: automated penetration tests. It auto-discovers every route and proves each is unauthenticated=401 / no-permission=403 / CSRF-protected, then attacks with SQL injection, XSS, CSV injection, mass assignment, privilege escalation, prototype pollution, oversized/malformed bodies, session fixation/replay/timeouts, brute force, race conditions (double-ship, double-approve) and checks hardening headers and encryption at rest.
+* `npm audit`: production dependencies report 0 known vulnerabilities (one moderate, dev-only ESLint/minimatch advisory remains; it does not ship).
+
 `npm test` (frontend) · `npm --prefix server test` (API: auth, CSRF, permissions, encryption, stock flows, masking, backups) · `npm run lint` · `npm run typecheck`

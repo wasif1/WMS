@@ -34,7 +34,7 @@ export default function Login() {
           <div className="card mt-4 space-y-2 p-4 text-xs">
             <p className="font-semibold text-slate-700">Demo mode - fake data stored only in your browser</p>
             <p className="text-slate-500">Password for all: <code className="rounded bg-slate-100 px-1">Demo-Passw0rd-2026</code></p>
-            {[['super@demo.test', 'Super admin - everything'], ['manager@demo.test', 'Manager - approves, sees real clients'], ['operator@demo.test', 'Operator - stock in / out'], ['dashboard@demo.test', 'Dashboard only']].map(([e, d]) => (
+            {[['super@demo.test', 'Super admin - everything'], ['owner@demo.test', 'Owner - approves requests'], ['operator@demo.test', 'Team - stock in/out, submits requests'], ['manager@demo.test', 'Manager - inbound approval, real clients'], ['dashboard@demo.test', 'Dashboard only']].map(([e, d]) => (
               <button key={e} type="button" className="flex w-full justify-between rounded px-2 py-1 text-left hover:bg-slate-100" onClick={() => { setEmail(e); setPassword('Demo-Passw0rd-2026') }}><span className="font-mono">{e}</span><span className="text-slate-500">{d}</span></button>
             ))}
           </div>

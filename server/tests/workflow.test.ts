@@ -11,7 +11,7 @@ async function world() {
   const s = await login(w.app, 's@x.com')
   const loc = async (name: string) => (await s.call('post', '/api/locations', { name })).body.id as number
   const A = await loc('Warehouse A'), B = await loc('Warehouse B')
-  const prod = (await s.call('post', '/api/products', { name: 'Widget', description: 'd', color: 'Red', weight: '500g', unitWeightKg: 0.5, boxWeightKg: 12, caseSize: 10, uom: 'unit', reorderLevel: 5 })).body
+  const prod = (await s.call('post', '/api/products', { name: 'Widget', description: 'd', color: 'Red', weight: '500g', caseSize: 10, uom: 'unit', reorderLevel: 5 })).body
   const client = (await s.call('post', '/api/clients', { name: 'Real Customer Inc', contact: 'c', address: 'a' })).body
   const stockOf = async (l: number) => ((await s.call('get', `/api/stock?locationId=${l}`)).body as any[]).find((x) => x.productId === prod.id) ?? { onHand: 0, reserved: 0, available: 0 }
   const receive = async (qty: number, l = A) => {
@@ -26,7 +26,7 @@ describe('stock flows', () => {
   it('auto-generates SKUs and keeps them unique per variation', async () => {
     const { s, prod } = await world()
     expect(prod.sku).toMatch(/^WID-RED-500G-0001$/)
-    const p2 = (await s.call('post', '/api/products', { name: 'Widget', description: '', color: 'Red', weight: '500g', unitWeightKg: 1, boxWeightKg: 1, caseSize: 1, uom: 'unit' })).body
+    const p2 = (await s.call('post', '/api/products', { name: 'Widget', color: 'Red', weight: '500g', caseSize: 1 })).body
     expect(p2.sku).toBe('WID-RED-500G-0002')
   })
   it('inbound -> reserve -> convert -> confirm updates every bucket correctly', async () => {
@@ -48,7 +48,8 @@ describe('stock flows', () => {
     expect((await s.call('post', `/api/outbound/${cv.body.outbound.id}/confirm`)).status).toBe(409) // no double ship
     expect(db.movements.count()).toBeGreaterThan(4)
     const ov = (await s.call('get', `/api/products/${prod.id}/overview`)).body
-    expect(ov.totals).toMatchObject({ onHand: 75, reserved: 0, outboundTotal: 25 })
+    expect(ov.totals).toMatchObject({ onHand: 75, reserved: 0, available: 75, boxes: 8 })
+    expect(ov.summaryCards).toBeUndefined()
   })
   it('transfers move stock through "in transit" and log the receiver', async () => {
     const { s, A, B, prod, stockOf, receive } = await world()
@@ -57,11 +58,11 @@ describe('stock flows', () => {
     expect((await s.call('post', `/api/transfers/${t.id}/submit`)).status).toBe(200)
     expect(await stockOf(A)).toMatchObject({ onHand: 30 })
     const d = (await s.call('get', '/api/dashboard')).body
-    expect(d.kpis.inTransit).toBe(20)
+    expect(d.kpis.transfersInTransit).toBe(1)
     const rc = await s.call('post', `/api/transfers/${t.id}/receive`, {})
     expect(rc.body.receivedBy).toMatchObject({ name: 's', location: 'Warehouse B' })
     expect(await stockOf(B)).toMatchObject({ onHand: 20 })
-    expect((await s.call('get', '/api/dashboard')).body.kpis.inTransit).toBe(0)
+    expect((await s.call('get', '/api/dashboard')).body.kpis.transfersInTransit).toBe(0)
   })
   it('outbound edit re-allocates, cancel releases, inbound needs a second approver', async () => {
     const { s, A, prod, client, stockOf, receive, mk, app } = await world()
@@ -77,17 +78,19 @@ describe('stock flows', () => {
     const inb = (await op.call('post', '/api/inbound', { locationId: A, lines: [{ productId: prod.id, loose: 5 }] })).body
     expect((await op.call('post', `/api/inbound/${inb.id}/approve`, {})).status).toBe(403)
   })
-  it('audit highlights differences and applies them only on confirm; adjustments are logged', async () => {
+  it('audit: team submits, stock changes ONLY after the owner approves; adjustments by the owner apply at once', async () => {
     const { s, A, prod, stockOf, receive } = await world()
     await receive(10)
     const a = (await s.call('post', '/api/audits', { locationId: A })).body
-    expect((await s.call('post', `/api/audits/${a.id}/confirm`)).status).toBe(400) // uncounted lines
+    expect((await s.call('post', `/api/audits/${a.id}/submit`)).status).toBe(400) // uncounted lines
     await s.call('put', `/api/audits/${a.id}/counts`, { counts: [{ productId: prod.id, locationId: A, counted: 7 }] })
-    expect(await stockOf(A)).toMatchObject({ onHand: 10 })
-    const c = await s.call('post', `/api/audits/${a.id}/confirm`)
-    expect(c.body.changes[0]).toMatchObject({ system: 10, counted: 7, delta: -3 })
+    expect((await s.call('post', `/api/audits/${a.id}/submit`)).body.status).toBe('submitted')
+    expect(await stockOf(A)).toMatchObject({ onHand: 10 }) // not applied yet
+    const ap = await s.call('post', `/api/approvals/audit/${a.id}/approve`, {})
+    expect(ap.body.status).toBe('approved')
     expect(await stockOf(A)).toMatchObject({ onHand: 7 })
-    expect((await s.call('post', '/api/adjustments', { productId: prod.id, locationId: A, newQty: 9, reason: 'found box' })).status).toBe(201)
+    const adj = await s.call('post', '/api/adjustments', { productId: prod.id, locationId: A, newQty: 9, reason: 'found box' })
+    expect(adj.status).toBe(201); expect(adj.body.status).toBe('approved')
     expect(await stockOf(A)).toMatchObject({ onHand: 9 })
   })
 })

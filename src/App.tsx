@@ -21,6 +21,7 @@ const Clients = lazy(() => import('@/pages/Clients'))
 const UsersPage = lazy(() => import('@/pages/Users'))
 const Admin = lazy(() => import('@/pages/Admin'))
 const Logs = lazy(() => import('@/pages/Logs'))
+const Approvals = lazy(() => import('@/pages/Approvals'))
 
 function Guard({ perms, superOnly, children }: { perms?: string[]; superOnly?: boolean; children: React.ReactNode }) {
   const { can, user } = useAuth()
@@ -47,6 +48,7 @@ export default function App() {
         <Route element={<Layout />}>
           {gated ? <Route path="*" element={<Account />} /> : (<>
             <Route index element={<Home />} />
+            <Route path="approvals" element={<Guard perms={['approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count']}><Approvals /></Guard>} />
             <Route path="products" element={<Guard perms={['products.view']}><Products /></Guard>} />
             <Route path="products/:id" element={<Guard perms={['products.view']}><ProductDetail /></Guard>} />
             <Route path="locations" element={<Guard perms={['locations.view', 'locations.manage']}><Locations /></Guard>} />

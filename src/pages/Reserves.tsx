@@ -10,6 +10,7 @@ import { get, post } from '@/lib/api'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import type { StockRow } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
+import { productLabel } from '@/lib/catalog'
 
 export default function Reserves() {
   const { can } = useAuth(); const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
@@ -69,7 +70,7 @@ function Process({ order, prods, onClose }: { order: any; prods: any[]; onClose:
         {active ? (<>
           {!order.clientId && <Field label="A client is required to move to outbound"><ClientSelect value={clientId} onChange={setClientId} /></Field>}
           <h3 className="text-sm font-semibold">Confirm quantities leaving the warehouse</h3>
-          <Table head={['Product', 'Reserved', 'Actually shipping']}>{order.lines.map((l: any) => <tr key={l.productId}><td className="td">{prods.find((p) => p.id === l.productId)?.sku}</td><td className="td">{fmt(l.qty)}</td><td className="td"><input className="input max-w-[8rem]" type="number" min={0} value={actual[l.productId] ?? 0} onChange={(e) => setActual({ ...actual, [l.productId]: Number(e.target.value) })} /></td></tr>)}</Table>
+          <Table head={['Product', 'Reserved', 'Actually shipping']}>{order.lines.map((l: any) => <tr key={l.productId}><td className="td">{(() => { const x = prods.find((p) => p.id === l.productId); return x ? productLabel(x) : l.productId })()}</td><td className="td">{fmt(l.qty)}</td><td className="td"><input className="input max-w-[8rem]" type="number" min={0} value={actual[l.productId] ?? 0} onChange={(e) => setActual({ ...actual, [l.productId]: Number(e.target.value) })} /></td></tr>)}</Table>
           {diff && <Field label="Comment (required - differs from reserved)"><input className="input" value={comment} onChange={(e) => setComment(e.target.value)} /></Field>}
           <ErrorBox error={convert.error ?? cancel.error} />
           <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={() => cancel.mutate(undefined)}>Release reservation</button><button className="btn-primary" disabled={convert.isPending || (diff && !comment.trim()) || (!order.clientId && !clientId)} onClick={() => convert.mutate(undefined)}>{convert.isPending && <Spinner />}Move to outbound</button></div>

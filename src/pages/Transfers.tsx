@@ -9,6 +9,7 @@ import { get, post } from '@/lib/api'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import type { StockRow } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
+import { productLabel } from '@/lib/catalog'
 
 export default function Transfers() {
   const { can } = useAuth(); const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
@@ -70,7 +71,7 @@ function Detail({ order, prods, loc, onClose }: { order: any; prods: any[]; loc:
         {order.note && <p className="text-sm text-slate-600">Note: {order.note}</p>}
         {order.status === 'in_transit' && can('transfers.receive') ? (<>
           <h3 className="flex items-center gap-2 text-sm font-semibold"><Truck className="h-4 w-4" />Verify physical inventory received</h3>
-          <Table head={['Product', 'Sent', 'Received']}>{order.lines.map((l: any) => <tr key={l.productId}><td className="td">{prods.find((p) => p.id === l.productId)?.sku}</td><td className="td">{fmt(l.qty)}</td><td className="td"><input className="input max-w-[8rem]" type="number" min={0} value={received[l.productId] ?? 0} onChange={(e) => setReceived({ ...received, [l.productId]: Number(e.target.value) })} /></td></tr>)}</Table>
+          <Table head={['Product', 'Sent', 'Received']}>{order.lines.map((l: any) => <tr key={l.productId}><td className="td">{(() => { const x = prods.find((p) => p.id === l.productId); return x ? productLabel(x) : l.productId })()}</td><td className="td">{fmt(l.qty)}</td><td className="td"><input className="input max-w-[8rem]" type="number" min={0} value={received[l.productId] ?? 0} onChange={(e) => setReceived({ ...received, [l.productId]: Number(e.target.value) })} /></td></tr>)}</Table>
           {differs && <Field label="Comment (required - quantities differ)"><input className="input" value={comment} onChange={(e) => setComment(e.target.value)} /></Field>}
           <ErrorBox error={receive.error} /><div className="flex justify-end"><button className="btn-primary" disabled={receive.isPending || (differs && !comment.trim())} onClick={() => receive.mutate(undefined)}>{receive.isPending && <Spinner />}Receive inventory</button></div>
         </>) : <LinesTable lines={order.lines} products={prods} extra={order.discrepancy?.length ? [{ head: 'Received', cell: (l) => fmt(order.receivedLines?.find((r: any) => r.productId === l.productId)?.qty) }] : undefined} />}

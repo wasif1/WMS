@@ -1,4 +1,5 @@
 import express from 'express'
+import { ZodError } from 'zod'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import fs from 'node:fs'
@@ -17,6 +18,7 @@ import { masterRoutes } from './routes/masters.js'
 import { orderRoutes } from './routes/orders.js'
 import { insightRoutes } from './routes/insights.js'
 import { adminRoutes } from './routes/admin.js'
+import { approvalRoutes } from './routes/approvals.js'
 
 export function createApp(db: Db) {
   const ctx: Ctx = { db, mailer: new Mailer(db), audit: new Audit(db) }
@@ -38,7 +40,7 @@ export function createApp(db: Db) {
   app.get('/api/health', (_req, res) => res.json({ ok: true }))
   app.use('/api/auth', authRoutes(ctx))
   app.use('/api/users', auth, userRoutes(ctx))
-  app.use('/api', auth, masterRoutes(ctx), orderRoutes(ctx, inv), insightRoutes(ctx, inv))
+  app.use('/api', auth, masterRoutes(ctx), orderRoutes(ctx, inv), approvalRoutes(ctx, inv), insightRoutes(ctx, inv))
   app.use('/api/admin', auth, adminRoutes(ctx))
   app.use('/api', (_req, _res, next) => next(new AppError(404, 'Not found')))
 
@@ -50,6 +52,7 @@ export function createApp(db: Db) {
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof AppError) return void res.status(err.status).json({ error: err.message, code: err.code })
+    if (err instanceof ZodError) return void res.status(400).json({ error: err.issues.map((i) => `${i.path.join('.') || 'request'}: ${i.message}`).join('; ') })
     if (err?.type === 'entity.parse.failed') return void res.status(400).json({ error: 'Malformed JSON' })
     if (err?.type === 'entity.too.large') return void res.status(413).json({ error: 'Payload too large' })
     console.error('[error]', err?.message) // never leak internals / stack to clients

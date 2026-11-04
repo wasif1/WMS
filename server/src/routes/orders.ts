@@ -7,17 +7,19 @@ import { ip, nowIso, wrap } from '../http.js'
 import type { Actor, Client, Comment, Line, Location, Product, User } from '../models.js'
 import { Inventory } from '../inventory.js'
 import { emails, idParam, lineInput, lines as linesSchema, optStr, parse } from '../validation.js'
-import { presentClient } from './masters.js'
+import { isOwner, presentClient, submission } from './masters.js'
+import { isApproved, productLabel } from '../catalog.js'
 
 const dateQ = z.object({ status: z.string().max(30).optional(), locationId: z.coerce.number().int().optional(), clientId: z.coerce.number().int().optional(), from: z.string().max(30).optional(), to: z.string().max(30).optional() })
 
 export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const r = Router()
   const actor = (u: User): Actor => ({ userId: u.id, name: u.name, at: nowIso() })
+  void isOwner
   const comment = (u: User, text: string): Comment[] => (text ? [{ by: u.name, at: nowIso(), text }] : [])
   const locName = (id?: number) => (ctx.db.locations.get(id ?? -1) as Location | undefined)?.name ?? `#${id}`
-  const sku = (id: number) => (ctx.db.products.get(id) as Product | undefined)?.sku ?? `#${id}`
-  const checkLoc = (id: number) => { const l = ctx.db.locations.get(id) as Location | undefined; if (!l) throw notFound('Location'); if (!l.active) throw bad(`Location ${l.name} is inactive`); return l }
+  const sku = (id: number) => { const p = ctx.db.products.get(id) as Product | undefined; return p ? productLabel(p) : `#${id}` }
+  const checkLoc = (id: number) => { const l = ctx.db.locations.get(id) as Location | undefined; if (!l || !isApproved(l)) throw notFound('Location'); if (!l.active) throw bad(`Location ${l.name} is inactive`); return l }
   const checkClient = (id: number) => { if (!ctx.db.clients.get(id)) throw notFound('Client') }
   const inRange = (at: string, q: z.infer<typeof dateQ>) => (!q.from || at >= q.from) && (!q.to || at <= q.to + 'T23:59:59.999Z')
   const lineStr = (ls: Line[]) => ls.map((l) => `  - ${sku(l.productId)}: ${l.qty}`).join('\n')
@@ -238,40 +240,47 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   }))
 
   // ============================ ADJUSTMENTS ============================
-  r.get('/adjustments', requirePerm('adjustments.view'), wrap((_req, res) => res.json((ctx.db.adjustments.all() as any[]).reverse())))
+  // The team SUBMITS an adjustment request. Stock changes only when the owner approves it (see /approvals).
+  r.get('/adjustments', requirePerm('adjustments.view'), wrap((_req, res) => res.json((ctx.db.adjustments.all() as any[]).map((a) => ({ ...a, status: a.status ?? 'approved' })).reverse())))
   r.post('/adjustments', requirePerm('adjustments.create'), wrap((req, res) => {
     const b = parse(z.object({ productId: z.number().int().positive(), locationId: z.number().int().positive(), newQty: z.number().finite().nonnegative().max(1e9), reason: z.string().trim().min(3).max(500) }).strict(), req.body)
-    if (!ctx.db.products.get(b.productId)) throw notFound('Product'); checkLoc(b.locationId)
+    const prod = ctx.db.products.get(b.productId) as Product | undefined
+    if (!prod || !isApproved(prod)) throw notFound('Product'); checkLoc(b.locationId)
     const s = inv.getStock(b.productId, b.locationId)
     const delta = Math.round((b.newQty - s.onHand) * 1000) / 1000
     if (delta === 0) throw bad('Quantity is unchanged')
+    if (b.newQty < s.reserved) throw conflict(`Cannot go below the ${s.reserved} units already reserved here`)
+    const sub = submission(req.user!)
     const a = ctx.db.tx(() => {
-      inv.apply(b.productId, b.locationId, { onHand: delta }, { type: 'adjustment', userId: req.user!.id, note: b.reason })
-      return ctx.db.adjustments.insert({ ...b, before: s.onHand, delta, by: actor(req.user!) })
+      const row = ctx.db.adjustments.insert({ ...b, before: s.onHand, delta, by: sub.submittedBy, status: sub.status, decidedBy: sub.decidedBy })
+      // the owner's own adjustment is approved on the spot; everyone else's waits
+      if (sub.status === 'approved') inv.apply(b.productId, b.locationId, { onHand: delta }, { type: 'adjustment', userId: req.user!.id, refType: 'adjustment', refId: row.id, note: b.reason })
+      return row
     })
-    ctx.audit.log(req.user!, 'adjustment.create', { entity: 'adjustment', entityId: a.id, detail: `${sku(b.productId)} ${delta > 0 ? '+' : ''}${delta}`, ip: ip(req) })
+    ctx.audit.log(req.user!, a.status === 'approved' ? 'adjustment.create' : 'adjustment.request', { entity: 'adjustment', entityId: a.id, detail: `${sku(b.productId)} ${delta > 0 ? '+' : ''}${delta}`, ip: ip(req) })
     res.status(201).json(a)
   }))
 
   // ============================ AUDITS ============================
-  const auditEmails = () => ((ctx.db.settings.all() as any[]).find((s) => s.auditEmails)?.auditEmails as string[]) ?? []
-  r.get('/audits', requirePerm('audits.view'), wrap((_req, res) => res.json((ctx.db.audits.all() as any[]).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: a.lines.filter((l: any) => l.counted != null && l.counted !== l.system).length })))))
+  // counting -> (team submits) -> submitted -> (owner approves) -> approved   [or rejected]. Stock updates ONLY on approval.
+  const diffsOf = (a: any) => a.lines.filter((l: any) => l.counted != null && l.counted !== l.system)
+  r.get('/audits', requirePerm('audits.view'), wrap((_req, res) => res.json((ctx.db.audits.all() as any[]).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: diffsOf(a).length })))))
   r.get('/audits/:id', requirePerm('audits.view'), wrap((req, res) => { const a = ctx.db.audits.get(idParam(req)); if (!a) throw notFound('Audit'); res.json(a) }))
   r.post('/audits', requirePerm('audits.create'), wrap((req, res) => {
     const b = parse(z.object({ name: z.string().trim().max(100).optional(), locationId: z.number().int().positive().optional() }).strict(), req.body)
     if (b.locationId) checkLoc(b.locationId)
-    const locs = (ctx.db.locations.all() as Location[]).filter((l) => l.active && (!b.locationId || l.id === b.locationId))
-    const prods = (ctx.db.products.all() as Product[]).filter((p) => p.active)
+    const locs = (ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && l.active && (!b.locationId || l.id === b.locationId))
+    const prods = (ctx.db.products.all() as Product[]).filter((p) => isApproved(p) && p.active)
     const lines = locs.flatMap((l) => prods.map((p) => ({ productId: p.id, locationId: l.id, system: inv.getStock(p.id, l.id).onHand, counted: null as number | null })))
     if (!lines.length) throw bad('Nothing to audit')
-    const a = ctx.db.audits.insert({ name: b.name || `Audit ${nowIso().slice(0, 10)}`, scope: b.locationId ?? null, lines, status: 'counting', createdBy: actor(req.user!) })
+    const a = ctx.db.audits.insert({ name: b.name || `Audit ${nowIso().slice(0, 10).replace(/-/g, '')}`, scope: b.locationId ?? null, lines, status: 'counting', createdBy: actor(req.user!) })
     ctx.audit.log(req.user!, 'audit.create', { entity: 'audit', entityId: a.id, ip: ip(req) })
     res.status(201).json(a)
   }))
   r.put('/audits/:id/counts', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
-    if (a.status !== 'counting') throw conflict('Audit is closed')
+    if (a.status !== 'counting') throw conflict('Audit is no longer open for counting')
     const b = parse(z.object({ counts: z.array(z.object({ productId: z.number().int(), locationId: z.number().int(), counted: z.number().finite().nonnegative().max(1e9).nullable() }).strict()).max(5000) }).strict(), req.body)
     for (const c of b.counts) {
       const l = a.lines.find((x: any) => x.productId === c.productId && x.locationId === c.locationId)
@@ -281,25 +290,13 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
     ctx.db.audits.update(id, { ...a, countedBy: actor(req.user!) })
     res.json(ctx.db.audits.get(id))
   }))
-  r.post('/audits/:id/confirm', requirePerm('audits.confirm'), wrap((req, res) => {
+  r.post('/audits/:id/submit', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
-    if (a.status !== 'counting') throw conflict('Audit is closed')
-    if (a.lines.some((l: any) => l.counted == null)) throw bad('Enter a physical count for every line before confirming')
-    const u = req.user!
-    const changes = ctx.db.tx(() => {
-      const out: any[] = []
-      for (const l of a.lines) {
-        const s = inv.getStock(l.productId, l.locationId) // apply against live stock, record what the system held at audit time
-        const delta = Math.round((l.counted - s.onHand) * 1000) / 1000
-        if (delta !== 0) { inv.apply(l.productId, l.locationId, { onHand: delta }, { type: 'audit', userId: u.id, refType: 'audit', refId: id }); out.push({ productId: l.productId, locationId: l.locationId, system: l.system, counted: l.counted, delta }) }
-      }
-      ctx.db.audits.update(id, { ...a, status: 'confirmed', confirmedBy: actor(u), changes: out })
-      return out
-    })
-    ctx.audit.log(u, 'audit.confirm', { entity: 'audit', entityId: id, detail: `${changes.length} changes`, ip: ip(req) })
-    mail([...auditEmails(), u.email], `Inventory audit #${id} confirmed - ${changes.length} change(s)`,
-      `Audit "${a.name}" confirmed by ${u.name} (${nowIso()}).\n\n${changes.length ? changes.map((c) => `  - ${sku(c.productId)} @ ${locName(c.locationId)}: system ${c.system} -> counted ${c.counted} (${c.delta > 0 ? '+' : ''}${c.delta})`).join('\n') : 'No differences found.'}\n`)
+    if (a.status !== 'counting') throw conflict('Audit has already been submitted')
+    if (a.lines.some((l: any) => l.counted == null)) throw bad('Enter a physical count for every line before submitting')
+    ctx.db.audits.update(id, { ...a, status: 'submitted', submittedBy: actor(req.user!) })
+    ctx.audit.log(req.user!, 'audit.submit', { entity: 'audit', entityId: id, detail: `${diffsOf(a).length} differences`, ip: ip(req) })
     res.json(ctx.db.audits.get(id))
   }))
 

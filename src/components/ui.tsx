@@ -23,9 +23,10 @@ export const Badge = ({ tone = 'gray', children }: { tone?: keyof typeof tones; 
 
 const statusTone: Record<string, keyof typeof tones> = {
   pending: 'amber', approved: 'green', rejected: 'red', draft: 'gray', in_transit: 'blue', received: 'green', cancelled: 'gray', active: 'indigo',
-  converted: 'green', saved: 'amber', confirmed: 'green', counting: 'amber',
+  converted: 'green', saved: 'amber', confirmed: 'green', counting: 'blue', submitted: 'amber',
 }
-export const StatusBadge = ({ status }: { status: string }) => <Badge tone={statusTone[status] ?? 'gray'}>{status.replace('_', ' ')}</Badge>
+const statusText: Record<string, string> = { pending: 'awaiting approval', submitted: 'awaiting approval', in_transit: 'in transit' }
+export const StatusBadge = ({ status }: { status: string }) => <Badge tone={statusTone[status] ?? 'gray'}>{statusText[status] ?? status.replace('_', ' ')}</Badge>
 
 export const Card = ({ className, children }: { className?: string; children: ReactNode }) => <div className={cn('card', className)}>{children}</div>
 export const Empty = ({ children }: { children: ReactNode }) => <div className="px-4 py-12 text-center text-sm text-slate-500">{children}</div>
@@ -83,12 +84,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([])
   const push = useCallback((kind: Toast['kind'], text: string) => {
     const id = Date.now() + Math.random()
-    setItems((s) => [...s, { id, kind, text }]); setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 5000)
+    setItems((s) => [...s.slice(-2), { id, kind, text }]); setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 4000)
   }, [])
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2" aria-live="polite">
+      <div className="pointer-events-none fixed right-4 top-4 z-[60] flex w-80 flex-col gap-2" aria-live="polite">
         {items.map((t) => (
           <div key={t.id} className="pointer-events-auto flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg">
             {t.kind === 'ok' ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : t.kind === 'err' ? <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" /> : <Info className="h-4 w-4 shrink-0 text-blue-600" />}

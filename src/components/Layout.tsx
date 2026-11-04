@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Archive, ArrowLeftRight, BarChart3, Boxes, ClipboardCheck, DatabaseBackup, Download, EyeOff, FileText, LayoutDashboard, LogOut, Menu, PackageCheck, PackageMinus, ScrollText, Settings2, ShieldCheck, SlidersHorizontal, Users, Warehouse, type LucideIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { get } from '@/lib/api'
+import { Archive, ArrowLeftRight, BadgeCheck, BarChart3, Boxes, ClipboardCheck, DatabaseBackup, Download, EyeOff, FileText, LayoutDashboard, LogOut, Menu, PackageCheck, PackageMinus, ScrollText, Settings2, ShieldCheck, SlidersHorizontal, Users, Warehouse, type LucideIcon } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { cn } from '@/lib/utils'
 import ThemeToggle from './ThemeToggle'
@@ -10,6 +12,7 @@ interface Item { to: string; label: string; icon: LucideIcon; perms: string[]; s
 const groups: { title: string; items: Item[] }[] = [
   { title: 'Overview', items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, perms: ['dashboard.view'] }] },
   { title: 'Inventory', items: [
+    { to: '/approvals', label: 'Approvals', icon: BadgeCheck, perms: ['approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count'] },
     { to: '/products', label: 'Products', icon: Boxes, perms: ['products.view'] },
     { to: '/locations', label: 'Locations', icon: Warehouse, perms: ['locations.view', 'locations.manage'] },
     { to: '/adjustments', label: 'Adjustments', icon: SlidersHorizontal, perms: ['adjustments.view', 'adjustments.create'] },
@@ -35,6 +38,8 @@ const groups: { title: string; items: Item[] }[] = [
 export default function Layout() {
   const { user, can, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const showApprovals = can('approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count')
+  const pend = useQuery({ queryKey: ['approvals', 'pending'], queryFn: () => get<{ pending: number }>('/approvals?status=pending'), enabled: showApprovals, refetchInterval: 60_000 })
   const visible = (i: Item) => (i.superOnly ? user?.role === 'super_admin' : can(...i.perms))
   return (
     <div className="min-h-screen lg:flex">
@@ -52,7 +57,7 @@ export default function Layout() {
                 <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.title}</p>
                 {items.map((i) => (
                   <NavLink key={i.to} to={i.to} end={i.to === '/'} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium', isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100')}>
-                    <i.icon className="h-4 w-4" />{i.label}
+                    <i.icon className="h-4 w-4" />{i.label}{i.to === '/approvals' && !!pend.data?.pending && <span className="ml-auto rounded-full bg-red-600 px-1.5 text-[11px] font-semibold text-white" aria-label={`${pend.data.pending} awaiting approval`}>{pend.data.pending}</span>}
                   </NavLink>
                 ))}
               </div>
