@@ -1,4 +1,4 @@
-export interface Me { simpleScreen?: boolean; id: number; name: string; email: string; role: 'super_admin' | 'admin' | 'user'; permissions: string[]; mustChangePassword: boolean; totpEnabled: boolean; mfaSetupRequired: boolean; active: boolean; locked?: boolean; lastLoginAt?: string }
+export interface Me { language?: 'en' | 'ur'; simpleScreen?: boolean; id: number; name: string; email: string; role: 'super_admin' | 'admin' | 'user'; permissions: string[]; mustChangePassword: boolean; totpEnabled: boolean; mfaSetupRequired: boolean; active: boolean; locked?: boolean; lastLoginAt?: string }
 export type Status = 'pending' | 'approved' | 'rejected'
 export interface Location { id: number; name: string; address: string; active: boolean; status?: Status }
 export interface Product { id: number; sku: string; name?: string; description?: string; color?: string; size?: string; weight?: string; caseSize?: number; uom: 'unit' | 'kg' | 'm' | 'bundle'; reorderLevel: number; active: boolean; status?: Status }

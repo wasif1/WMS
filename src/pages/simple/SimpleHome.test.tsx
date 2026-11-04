@@ -46,7 +46,8 @@ describe('operator single-page screen', () => {
   it('search finds by name AND by code, shows stock per warehouse, and explains empty results', async () => {
     state.perms = ['products.view']; renderHome()
     const box = await screen.findByLabelText('Search products')
-    expect(await screen.findByText('Cotton T-Shirt')).toBeInTheDocument()
+    expect(screen.queryByText('Cotton T-Shirt')).toBeNull() // nothing until the person searches
+    await userEvent.click(screen.getByRole('button', { name: 'Show all products' })); expect(await screen.findByText('Cotton T-Shirt')).toBeInTheDocument()
     await userEvent.type(box, 'rice'); expect(screen.getByText('Basmati Rice')).toBeInTheDocument(); expect(screen.queryByText('Cotton T-Shirt')).toBeNull()
     await userEvent.clear(box); await userEvent.type(box, 'cot-bla-l'); expect(screen.getByText('Cotton T-Shirt')).toBeInTheDocument(); expect(screen.getByText('Code: COT-BLA-L-0001')).toBeInTheDocument()
     expect(screen.getByText('Karachi Main:')).toBeInTheDocument(); expect(screen.getByText('120')).toBeInTheDocument(); expect(screen.getByText(/≈ 5 boxes/)).toBeInTheDocument()
@@ -55,13 +56,14 @@ describe('operator single-page screen', () => {
   })
   it('"only what is in stock" and the warehouse filter work', async () => {
     state.perms = ['products.view']; renderHome()
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all products' }))
     await screen.findByText('Basmati Rice')
     await userEvent.click(screen.getByLabelText('Only show what is in stock')); expect(screen.queryByText('Basmati Rice')).toBeNull(); expect(screen.getByText('Steel Wire Roll')).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText('Warehouse'), 'Karachi Main'); expect(screen.queryByText('Steel Wire Roll')).toBeNull(); expect(screen.getByText('Cotton T-Shirt')).toBeInTheDocument()
   })
   it('lists work waiting for the person (goods to receive) and the answers to their requests', async () => {
     state.perms = ['transfers.view', 'transfers.receive', 'products.create', 'adjustments.create']; renderHome()
-    expect(await screen.findByText(/Goods arriving: Karachi Main → Lahore Hub/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Receive' })).toBeInTheDocument()
+    expect(await screen.findByText(/Goods arriving: Karachi Main\s*\S\s*Lahore Hub/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Receive' })).toBeInTheDocument()
     expect(await screen.findByText('Not approved')).toBeInTheDocument(); expect(screen.getByText(/Owner says: “Duplicate of an existing item”/)).toBeInTheDocument(); expect(screen.getByText('Waiting for the owner')).toBeInTheDocument()
   })
   it('does not ask the server for things the person has no right to see', async () => {
@@ -72,7 +74,7 @@ describe('operator single-page screen', () => {
   })
   it('a saved transfer draft shows up under "Waiting for you" with a Send it button', async () => {
     state.perms = ['transfers.view', 'transfers.create']; renderHome()
-    expect(await screen.findByText(/Ready to send: Lahore Hub → Karachi Main/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Send it' })).toBeInTheDocument()
+    expect(await screen.findByText(/Ready to send: Lahore Hub\s*\S\s*Karachi Main/)).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Send it' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Send it' }))
     expect(within(await screen.findByRole('dialog', { name: 'Transfer #6' })).getByRole('button', { name: 'Send it' })).toBeInTheDocument()
   })

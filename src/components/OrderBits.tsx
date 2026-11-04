@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { t } from '@/i18n'
 import { Table } from './ui'
 import type { Actor, Line, Product } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
@@ -7,7 +8,7 @@ import { productLabel } from '@/lib/catalog'
 export function LinesTable({ lines, products, extra }: { lines: Line[]; products: Product[]; extra?: { head: string; cell: (l: Line) => ReactNode }[] }) {
   const byId = new Map(products.map((p) => [p.id, p]))
   return (
-    <Table head={['Product', 'Cases', 'Loose', 'Qty', ...(extra?.map((e) => e.head) ?? [])]}>
+    <Table head={[t("Product"), t("Cases"), t("Loose"), t("Qty"), ...(extra?.map((e) => t(e.head)) ?? [])]}>
       {lines.map((l) => { const p = byId.get(l.productId); return (
         <tr key={l.productId}><td className="td">{p ? productLabel(p) : l.productId}</td><td className="td">{l.cases}</td><td className="td">{l.loose}</td><td className="td font-semibold">{fmt(l.qty)}</td>{extra?.map((e) => <td key={e.head} className="td">{e.cell(l)}</td>)}</tr>
       ) })}

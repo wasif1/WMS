@@ -8,6 +8,8 @@ export interface User {
   permissions: string[]
   /** staff who see the simple one-page screen (no side menu) instead of the full app */
   simpleScreen?: boolean
+  /** preferred interface language, saved when the user switches */
+  language?: 'en' | 'ur'
   passwordHash: string
   active: boolean
   mustChangePassword: boolean

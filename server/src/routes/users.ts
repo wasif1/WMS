@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { T, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { destroyUserSessions, requireSuper } from '../auth.js'
@@ -27,7 +28,7 @@ export function userRoutes(ctx: Ctx) {
 
   r.post('/', wrap(async (req, res) => {
     const b = parse(createSchema, req.body)
-    if (ctx.db.users.byIdx('email_idx', blindIndex(b.email, 'email'))) throw new AppError(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
+    if (ctx.db.users.byIdx('email_idx', blindIndex(b.email, 'email'))) throw new AppError(409, T("A user with this email address already exists."), 'duplicate', [{ field: 'email', message: T("This email is already in use.") }])
     const temp = tempPassword()
     const u = ctx.db.users.insert(
       { name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions, simpleScreen: b.role !== 'super_admin' && !!b.simpleScreen, passwordHash: await hashPassword(temp), active: true, mustChangePassword: true, failedLogins: 0, createdAt: nowIso() },
@@ -45,7 +46,7 @@ export function userRoutes(ctx: Ctx) {
     const next = { ...u, ...b } as User
     if (next.role === 'super_admin') { next.permissions = []; next.simpleScreen = false } // owners always get the full app
     const losesSuper = u.role === 'super_admin' && u.active && (next.role !== 'super_admin' || !next.active)
-    if (losesSuper && activeSupers() <= 1) throw bad("You can't remove or disable the last active super admin. Make someone else a super admin first.")
+    if (losesSuper && activeSupers() <= 1) throw bad(T("You can't remove or disable the last active super admin. Make someone else a super admin first."))
     ctx.db.users.update(id, next, idx(next))
     if (b.active === false || b.role || b.permissions) destroyUserSessions(ctx, id) // force re-auth so new rights apply immediately
     ctx.audit.log(req.user!, 'user.update', { entity: 'user', entityId: id, detail: JSON.stringify({ ...b, permissions: b.permissions?.length }), ip: ip(req) })

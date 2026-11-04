@@ -4,6 +4,7 @@ import type { Ctx } from '../context.js'
 import { hasPerm, requirePerm } from '../auth.js'
 import { notFound } from '../errors.js'
 import { isApproved, productLabel, variationOf } from '../catalog.js'
+import { T, render, statusWord } from '../i18n/index.js'
 import { wrap } from '../http.js'
 import type { Client, Line, Location, Movement, Product, Stock, User } from '../models.js'
 import { Inventory } from '../inventory.js'
@@ -22,10 +23,13 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
   const r = Router()
   const products = () => new Map((ctx.db.products.all() as Product[]).map((p) => [p.id, p]))
   const locations = () => new Map((ctx.db.locations.all() as Location[]).map((l) => [l.id, l]))
-  const sendCsv = (res: any, name: string, rows: Record<string, unknown>[]) => {
+  const sendCsv = (req: any, res: any, name: string, rows: Record<string, unknown>[]) => {
+    const lang = req.lang ?? 'en'
+    const word = (k: string, v: unknown) => (typeof v !== 'string' ? v : k === 'Status' ? render(statusWord(v), lang) : k === 'Type' ? render(T(v.charAt(0).toUpperCase() + v.slice(1)), lang) : k === 'UOM' ? render(T(v === 'unit' ? 'units' : v === 'bundle' ? 'bundles' : v), lang) : v)
+    const out = rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [render(T(k), lang), word(k, v)])))
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', `attachment; filename="${name}"`)
-    res.send(toCsv(rows))
+    res.send('\uFEFF' + toCsv(out)) // BOM: Excel needs it to read Urdu text
   }
 
   // ---------------- Dashboard (ORDER data, not unit data) ----------------
@@ -110,7 +114,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
     const A = new Map((ctx.db.audits.all() as any[]).map((a) => [a.id, a.name as string]))
     const stock = (ctx.db.stock.all() as Stock[]).filter((s) => s.productId === id)
     const moves = (ctx.db.movements.all() as Movement[]).filter((m) => m.productId === id && (!q.locationId || m.locationId === q.locationId)).reverse().slice(0, 200)
-    const refLabel = (m: Movement) => (m.refType === 'audit' ? A.get(m.refId ?? -1) ?? `Audit #${m.refId}` : m.refType === 'adjustment' ? m.note ?? 'Adjustment' : m.refType ? `${m.refType} #${m.refId}` : m.note ?? '')
+    const refName = (m: Movement) => (m.refType === 'audit' ? A.get(m.refId ?? -1) : undefined)
     const rowsByLoc = stock.map((s) => ({ locationId: s.locationId, location: L.get(s.locationId)?.name, onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null }))
     const totalAvail = rowsByLoc.reduce((a, r2) => a + r2.available, 0)
     res.json({
@@ -118,7 +122,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
       // the full pipeline lives in this table (the summary cards were removed on request)
       byLocation: rowsByLoc,
       totals: { onHand: rowsByLoc.reduce((a, r2) => a + r2.onHand, 0), reserved: rowsByLoc.reduce((a, r2) => a + r2.reserved, 0), available: totalAvail, boxes: p.caseSize ? Math.ceil(totalAvail / p.caseSize) : null },
-      movements: moves.map((m) => ({ ...m, location: L.get(m.locationId)?.name, user: U.get(m.userId), refLabel: refLabel(m) })),
+      movements: moves.map((m) => ({ ...m, location: L.get(m.locationId)?.name, user: U.get(m.userId), refName: refName(m) })),
     })
   }))
 
@@ -130,7 +134,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
       const p = P.get(s.productId)
       return { SKU: p?.sku, Product: p?.name ?? p?.sku, Variation: p ? variationOf(p) : '', Weight: p?.weight ?? '', Location: L.get(s.locationId)?.name, 'Case pack': p?.caseSize ?? '', UOM: p?.uom, 'On hand': s.onHand, Reserved: s.reserved, Available: s.onHand - s.reserved, Boxes: p?.caseSize ? Math.ceil(s.onHand / p.caseSize) : '' }
     })
-    if (q.format === 'csv') return sendCsv(res, 'inventory-report.csv', rows)
+    if (q.format === 'csv') return sendCsv(req, res, 'inventory-report.csv', rows)
     res.json(rows)
   }))
 
@@ -149,7 +153,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
         (!q.locationId || [o.locationId, o.fromLocationId, o.toLocationId].includes(q.locationId)) && (!q.from || at(o).slice(0, 10) >= q.from) && (!q.to || at(o).slice(0, 10) <= q.to))
         .map((o: any) => ({ Type: t, Number: o.id, Date: at(o), Status: o.status, Location: loc(o), Client: o.clientId ? (reveal ? C.get(o.clientId)?.name : C.get(o.clientId)?.alias) : '', Lines: o.lines.length, Units: o.lines.reduce((a: number, l: Line) => a + l.qty, 0), 'Created by': (o.createdBy ?? o.enteredBy).name })))
       .sort((a, b) => b.Date.localeCompare(a.Date))
-    if (q.format === 'csv') return sendCsv(res, 'orders-report.csv', rows)
+    if (q.format === 'csv') return sendCsv(req, res, 'orders-report.csv', rows)
     res.json(rows)
   }))
   return r

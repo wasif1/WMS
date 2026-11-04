@@ -5,11 +5,15 @@
  */
 import { ALL_KEYS, PERMISSIONS } from '../../server/src/permissions'
 import { ApiError } from './api'
+import { T, list, render, statusWord, type Msg } from '../../server/src/i18n/index'
+import { getLang, t } from '@/i18n'
 
-const KEY = 'wms-demo-db-v3', DEMO_PW = 'Demo-Passw0rd-2026'
+const KEY = 'wms-demo-db-v4', DEMO_PW = 'Demo-Passw0rd-2026'
 type A = any
 const now = () => new Date().toISOString()
-const err = (s: number, m: string, code?: string, fields?: { field: string; message: string }[]) => new ApiError(s, m, code, fields)
+/** Same message templates (and Urdu dictionary) as the real server, so the demo speaks both languages too. */
+const rm = (m: Msg | string) => (typeof m === 'string' ? m : render(m, getLang()))
+const err = (s: number, m: Msg | string, code?: string, fields?: { field: string; message: Msg | string }[]) => new ApiError(s, rm(m), code, fields?.map((f) => ({ field: f.field, message: rm(f.message) })))
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
 function seed(): A {
@@ -71,27 +75,28 @@ export const resetDemo = () => { try { localStorage.removeItem(KEY); sessionStor
 
 const curId = () => { try { return Number(sessionStorage.getItem('wms-demo-user')) || 0 } catch { return 0 } }
 const effective = (u: A) => (u.role === 'super_admin' ? [...ALL_KEYS, 'users.manage', 'backups.manage'] : u.permissions)
-const pub = (u: A) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen, permissions: effective(u), mustChangePassword: !!u.mustChangePassword, totpEnabled: !!u.totpEnabled, mfaSetupRequired: false, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt, locked: false })
+const pub = (u: A) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen, language: u.language, permissions: effective(u), mustChangePassword: !!u.mustChangePassword, totpEnabled: !!u.totpEnabled, mfaSetupRequired: false, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt, locked: false })
 const can = (u: A, ...p: string[]) => u.role === 'super_admin' || p.some((x) => u.permissions.includes(x))
 const log = (u: A, action: string, detail = '') => db.logs.push({ id: db.id('log'), at: now(), userName: u?.name ?? 'anonymous', action, detail, ip: 'demo' })
 
 const stockRow = (p: number, l: number) => { let s = db.stock.find((x: A) => x.productId === p && x.locationId === l); if (!s) { s = { productId: p, locationId: l, onHand: 0, reserved: 0 }; db.stock.push(s) } return s }
+const names = (p: number, l: number) => ({ product: plabel(db.products.find((x: A) => x.id === p)), location: db.locations.find((x: A) => x.id === l)?.name ?? '' })
 function apply(p: number, l: number, d: { onHand?: number; reserved?: number }, m: { type: string; userId: number; refType?: string; refId?: number; note?: string }) {
   const s = stockRow(p, l); const onHand = r3(s.onHand + (d.onHand ?? 0)), reserved = r3(s.reserved + (d.reserved ?? 0))
-  if (onHand < 0) throw err(409, `Not enough stock: ${plabel(db.products.find((x: A) => x.id === p))} has only ${s.onHand} on hand, but ${Math.abs(d.onHand ?? 0)} is needed.`, 'insufficient_stock')
-  if (reserved < 0) throw err(409, 'This would release more than is reserved. Refresh the page and try again.', 'stock_changed')
-  if (reserved > onHand) throw err(409, `Not enough available stock: ${plabel(db.products.find((x: A) => x.id === p))} has ${r3(s.onHand - s.reserved)} available right now (${s.reserved} of ${s.onHand} is already reserved).`, 'insufficient_stock')
+  if (onHand < 0) throw err(409, T('Not enough stock: {product} at {location} has only {onHand} on hand, but {needed} is needed.', { ...names(p, l), onHand: s.onHand, needed: Math.abs(d.onHand ?? 0) }), 'insufficient_stock')
+  if (reserved < 0) throw err(409, T('This would release more than is reserved for {product} at {location}. Refresh the page and try again.', names(p, l)), 'stock_changed')
+  if (reserved > onHand) throw err(409, T('Not enough available stock: {product} at {location} has {available} available right now ({reserved} of {onHand} is already reserved).', { ...names(p, l), available: r3(s.onHand - s.reserved), reserved: s.reserved, onHand: s.onHand }), 'insufficient_stock')
   s.onHand = onHand; s.reserved = reserved
   db.movements.push({ id: db.id('m'), productId: p, locationId: l, type: m.type, onHandDelta: d.onHand ?? 0, reservedDelta: d.reserved ?? 0, onHandAfter: onHand, refType: m.refType, refId: m.refId, userId: m.userId, note: m.note, at: now() })
 }
 function build(input: A[], zero = false) {
-  if (!input?.length) throw err(400, 'At least one line is required')
+  if (!input?.length) throw err(400, 'Add at least one product before saving.')
   return input.map((l) => {
-    const p = db.products.find((x: A) => x.id === l.productId); if (!p) throw err(404, 'Product not found')
-    if (!approved(p)) throw err(400, `${plabel(p)} is not approved yet`)
-    if ((l.cases ?? 0) > 0 && !p.caseSize) throw err(400, `${plabel(p)} has no case pack - enter loose quantity only`)
+    const p = db.products.find((x: A) => x.id === l.productId); if (!p) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T('One of the products') }), 'not_found')
+    if (!approved(p)) throw err(400, T('{product} is still waiting for owner approval, so it cannot be used yet.', { product: plabel(p) }))
+    if ((l.cases ?? 0) > 0 && !p.caseSize) throw err(400, T('{product} has no case pack, so enter the amount under "Loose units" instead of cases.', { product: plabel(p) }))
     const qty = r3((l.cases ?? 0) * (p.caseSize ?? 0) + (l.loose ?? 0))
-    if (qty < 0 || (qty === 0 && !zero)) throw err(400, `Quantity for ${plabel(p)} must be greater than zero`)
+    if (qty < 0 || (qty === 0 && !zero)) throw err(400, T('Enter a quantity greater than zero for {product}.', { product: plabel(p) }))
     return { productId: p.id, cases: l.cases ?? 0, loose: l.loose ?? 0, qty }
   })
 }
@@ -106,26 +111,32 @@ const wc = (u: A, o: A) => ({ ...o, client: o.clientId ? client(u, o.clientId) :
 const sku = (id: number) => plabel(db.products.find((p: A) => p.id === id))
 const mail = (to: string[], subject: string) => db.outbox.push({ id: db.id('mail'), to, subject, at: now(), status: 'not_configured' })
 const sum = (ls: A[]) => ls.reduce((a, l) => a + l.qty, 0)
-const csv = (rows: A[]) => (rows.length ? [Object.keys(rows[0]).join(','), ...rows.map((r) => Object.values(r).map((v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : /^[=+\-@]/.test(s) ? "'" + s : s }).join(','))].join('\n') : '')
+const csv = (rows0: A[]) => {
+  const lang = getLang()
+  const word = (k: string, v: unknown) => (typeof v !== 'string' ? v : k === 'Status' ? render(statusWord(v), lang) : k === 'Type' ? render(T(v.charAt(0).toUpperCase() + v.slice(1)), lang) : k === 'UOM' ? render(T(v === 'unit' ? 'units' : v === 'bundle' ? 'bundles' : v), lang) : v)
+  const rows = rows0.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [render(T(k), lang), word(k, v)])))
+  return rows.length ? '\uFEFF' + [Object.keys(rows[0]).join(','), ...rows.map((r) => Object.values(r).map((v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : /^[=+\-@]/.test(s) ? "'" + s : s }).join(','))].join('\n') : ''
+}
 const qs = (path: string) => Object.fromEntries(new URLSearchParams(path.split('?')[1] ?? ''))
 
 type H = (u: A, b: A, m: RegExpMatchArray, q: Record<string, string>) => unknown
 const routes: [string, RegExp, string[] | 'super' | null, H][] = []
 const R = (method: string, re: string, perm: string[] | 'super' | null, h: H) => routes.push([method, new RegExp(`^${re}$`), perm, h])
-const find = (arr: A[], id: string, what: string) => { const x = arr.find((o) => o.id === Number(id)); if (!x) throw err(404, `${what} could not be found. It may have been removed - refresh the page and try again.`, 'not_found'); return x }
+const find = (arr: A[], id: string, what: string) => { const x = arr.find((o) => o.id === Number(id)); if (!x) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T(what) }), 'not_found'); return x }
 
 // ---- auth
 R('GET', '/auth/me', null, (u) => ({ user: pub(u), csrf: 'demo' }))
 R('POST', '/auth/logout', null, () => { sessionStorage.removeItem('wms-demo-user'); return { ok: true } })
-R('POST', '/auth/password', null, (u, b) => { if (b.currentPassword !== u.password) throw err(400, 'Current password is incorrect'); if (String(b.newPassword).length < 12) throw err(400, 'Password must be at least 12 characters'); u.password = b.newPassword; u.mustChangePassword = false; return { ok: true } })
+R('POST', '/auth/password', null, (u, b) => { if (b.currentPassword !== u.password) throw err(400, T('Your current password is incorrect.'), 'wrong_password', [{ field: 'currentPassword', message: T('Your current password is incorrect.') }]); if (String(b.newPassword).length < 12) throw err(400, T('Password must be at least 12 characters long.'), 'weak_password', [{ field: 'newPassword', message: T('Password must be at least 12 characters long.') }]); u.password = b.newPassword; u.mustChangePassword = false; return { ok: true } })
+R('POST', '/auth/language', null, (u, b) => { if (!['en', 'ur'].includes(b.language)) throw err(400, T('{msg}.', { msg: T('{label} must be one of: {list}', { label: T('Language'), list: list(['en', 'ur'], ', ') }) }), 'validation'); u.language = b.language; return { ok: true, language: b.language } })
 R('POST', '/auth/totp/setup', null, () => ({ secret: 'DEMOSECRETDEMOSECRET', otpauthUrl: 'otpauth://totp/WMS:demo?secret=DEMOSECRETDEMOSECRET&issuer=WMS' }))
-R('POST', '/auth/totp/enable', null, () => { throw err(400, 'Two-factor is disabled in demo mode') })
-R('POST', '/auth/totp/disable', null, () => { throw err(400, 'Two-factor is disabled in demo mode') })
+R('POST', '/auth/totp/enable', null, () => { throw err(400, t('Two-factor is disabled in demo mode')) })
+R('POST', '/auth/totp/disable', null, () => { throw err(400, t('Two-factor is disabled in demo mode')) })
 // ---- users
 R('GET', '/users/meta', 'super', () => ({ permissions: PERMISSIONS }))
 R('GET', '/users', 'super', () => db.users.map(pub))
 R('POST', '/users', 'super', (u, b) => {
-  if (db.users.some((x: A) => x.email.toLowerCase() === String(b.email).toLowerCase())) throw err(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
+  if (db.users.some((x: A) => x.email.toLowerCase() === String(b.email).toLowerCase())) throw err(409, T('A user with this email address already exists.'), 'duplicate', [{ field: 'email', message: T('This email is already in use.') }])
   const temp = `Temp-${Math.random().toString(36).slice(2, 10)}-${Math.floor(1000 + Math.random() * 9000)}`
   const n = { id: db.id('u'), name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions ?? [], simpleScreen: b.role !== 'super_admin' && !!b.simpleScreen, password: temp, active: true, mustChangePassword: true, createdAt: now() }
   db.users.push(n); log(u, 'user.create', n.email); return { user: pub(n), temporaryPassword: temp }
@@ -133,7 +144,7 @@ R('POST', '/users', 'super', (u, b) => {
 R('PATCH', '/users/(\\d+)', 'super', (u, b, m) => {
   const t = find(db.users, m[1], 'User'); const wasSuper = t.role === 'super_admin' && t.active
   const next = { ...t, ...(b.name !== undefined && { name: b.name }), ...(b.role && { role: b.role }), ...(b.permissions && { permissions: b.permissions }), ...(b.active !== undefined && { active: b.active }), ...(b.simpleScreen !== undefined && { simpleScreen: b.simpleScreen }) }
-  if (wasSuper && (next.role !== 'super_admin' || !next.active) && db.users.filter((x: A) => x.role === 'super_admin' && x.active).length <= 1) throw err(400, 'There must be at least one active super admin')
+  if (wasSuper && (next.role !== 'super_admin' || !next.active) && db.users.filter((x: A) => x.role === 'super_admin' && x.active).length <= 1) throw err(400, T("You can't remove or disable the last active super admin. Make someone else a super admin first."))
   Object.assign(t, next); log(u, 'user.update', t.email); return pub(t)
 })
 R('POST', '/users/(\\d+)/reset-password', 'super', (u, _b, m) => { const t = find(db.users, m[1], 'User'); t.password = `Temp-${Math.random().toString(36).slice(2, 10)}-4821`; t.mustChangePassword = true; log(u, 'user.reset_password', t.email); return { temporaryPassword: t.password } })
@@ -142,15 +153,15 @@ R('POST', '/users/(\\d+)/(unlock|reset-mfa)', 'super', () => ({ ok: true }))
 const viewAny = ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'reports.inventory', 'reports.orders', 'locations.view', 'locations.manage']
 R('GET', '/locations', viewAny, () => db.locations.filter(approved))
 R('POST', '/locations', ['locations.manage'], (u, b) => {
-  if (!b.name?.trim()) throw err(400, 'Name is required.', 'validation', [{ field: 'name', message: 'Name is required' }])
-  if (db.locations.some((l: A) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw err(409, 'A location with this name already exists. Please use a different name.', 'duplicate', [{ field: 'name', message: 'This name is already used.' }])
+  if (!b.name?.trim()) throw err(400, T('{msg}.', { msg: T('{label} is required', { label: T('Name') }) }), 'validation', [{ field: 'name', message: T('{label} is required', { label: T('Name') }) }])
+  if (db.locations.some((l: A) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw err(409, T('A location with this name already exists. Please use a different name.'), 'duplicate', [{ field: 'name', message: T('This name is already used.') }])
   const l = { id: db.id('l'), name: b.name, address: b.address ?? '', active: b.active ?? true, ...submission(u) }; db.locations.push(l); log(u, l.status === 'approved' ? 'location.create' : 'location.request', l.name); return l
 })
 R('PUT', '/locations/(\\d+)', ['locations.manage'], (u, b, m) => { const l = find(db.locations.filter(approved), m[1], 'Location'); Object.assign(l, { name: b.name, address: b.address ?? '', active: b.active }); log(u, 'location.update', l.name); return l })
 R('GET', '/products', viewAny, () => db.products.filter(approved))
 R('POST', '/products', ['products.create'], (u, b) => {
-  const bad = Object.keys(b).filter((k) => !['name', 'description', 'color', 'size', 'weight', 'caseSize', 'uom', 'reorderLevel'].includes(k)); if (bad.length) throw err(400, `Unrecognized key(s): ${bad.join(', ')}`)
-  if (b.uom && !['unit', 'kg', 'm', 'bundle'].includes(b.uom)) throw err(400, 'uom: Invalid')
+  const bad = Object.keys(b).filter((k) => !['name', 'description', 'color', 'size', 'weight', 'caseSize', 'uom', 'reorderLevel'].includes(k)); if (bad.length) throw err(400, T('{msg}.', { msg: T('{label} contains fields that are not allowed ({list})', { label: T('Request'), list: list(bad, ', ') }) }), 'validation')
+  if (b.uom && !['unit', 'kg', 'm', 'bundle'].includes(b.uom)) throw err(400, T('{msg}.', { msg: T('{label} must be one of: {list}', { label: T('Measured by'), list: list(['unit', 'kg', 'm', 'bundle'], ', ') }) }), 'validation')
   const p = { id: db.id('p'), sku: skuBase(b.name ?? '', b.color ?? '', b.size ?? '', b.weight ?? '', db), name: b.name || undefined, description: b.description || undefined, color: b.color || undefined, size: b.size || undefined, weight: b.weight || undefined, caseSize: b.caseSize || undefined, uom: b.uom ?? 'unit', reorderLevel: b.reorderLevel ?? 0, active: true, createdAt: now(), ...submission(u) }
   db.products.push(p); log(u, p.status === 'approved' ? 'product.create' : 'product.request', p.sku); return p
 })
@@ -158,7 +169,7 @@ R('PUT', '/products/(\\d+)', ['products.edit'], (u, b, m) => { const p = find(db
 const cv = ['clients.view', 'clients.manage', 'clients.reveal', 'reserves.create', 'outbound.create', 'reserves.view', 'outbound.view']
 R('GET', '/clients', cv, (u) => db.clients.map((c: A) => client(u, c.id)))
 R('POST', '/clients', ['clients.manage'], (u, b) => { const n = db.clients.length; const c = { id: db.id('c'), alias: `Client ${String.fromCharCode(65 + (n % 26))}${n >= 26 ? Math.floor(n / 26) : ''}`, name: b.name, contact: b.contact ?? '', address: b.address ?? '' }; db.clients.push(c); log(u, 'client.create', c.alias); return client(u, c.id) })
-R('PUT', '/clients/(\\d+)', ['clients.manage'], (u, b, m) => { if (!can(u, 'clients.reveal')) throw err(400, 'Editing client details requires the "see real client details" permission'); const c = find(db.clients, m[1], 'Client'); Object.assign(c, { name: b.name, contact: b.contact, address: b.address }); return client(u, c.id) })
+R('PUT', '/clients/(\\d+)', ['clients.manage'], (u, b, m) => { if (!can(u, 'clients.reveal')) throw err(403, T('Editing client details needs the "see real client details" permission. Ask a super admin to grant it.'), 'forbidden'); const c = find(db.clients, m[1], 'Client'); Object.assign(c, { name: b.name, contact: b.contact, address: b.address }); return client(u, c.id) })
 // ---- stock
 R('GET', '/stock', ['dashboard.view', 'products.view', 'inbound.view', 'transfers.create', 'reserves.create', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'reports.inventory'], (_u, _b, _m, q) =>
   db.stock.filter((s: A) => (!q.locationId || s.locationId === +q.locationId) && (!q.productId || s.productId === +q.productId)).map((s: A) => ({ ...s, available: s.onHand - s.reserved })))
@@ -166,26 +177,26 @@ R('GET', '/stock', ['dashboard.view', 'products.view', 'inbound.view', 'transfer
 R('GET', '/inbound', ['inbound.view'], (_u, _b, _m, q) => db.inbound.filter((o: A) => !q.status || o.status === q.status).slice().reverse())
 R('POST', '/inbound', ['inbound.create'], (u, b) => { const o = { id: db.id('i'), locationId: b.locationId, reference: b.reference ?? '', notifyEmails: b.notifyEmails ?? [], lines: build(b.lines), status: 'pending', comments: b.comments ? [{ by: u.name, at: now(), text: b.comments }] : [], enteredBy: actor(u) }; db.inbound.push(o); log(u, 'inbound.create', `#${o.id}`); return o })
 R('POST', '/inbound/(\\d+)/approve', ['inbound.approve'], (u, b, m) => {
-  const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed')
-  if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw err(403, 'Segregation of duties: someone else must approve a packing list you entered')
+  const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed')
+  if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw err(403, T('You entered this packing list, so someone else must approve it (separation of duties).'), 'separation_of_duties')
   const verified = b.verified ? build(b.verified, true) : o.lines
   const differs = o.lines.some((l: A) => (verified.find((v: A) => v.productId === l.productId)?.qty ?? 0) !== l.qty)
-  if (differs && !b.comment) throw err(400, 'Verified quantities differ from the packing list - a comment is required')
+  if (differs && !b.comment) throw err(400, T('The verified quantities differ from the packing list. Please add a comment explaining why.'), 'validation', [{ field: 'comment', message: T('A comment is required when quantities differ.') }])
   for (const l of verified) if (l.qty > 0) apply(l.productId, o.locationId, { onHand: l.qty }, { type: 'inbound', userId: u.id, refType: 'inbound', refId: o.id })
   Object.assign(o, { status: 'approved', verified, decidedBy: actor(u) }); if (b.comment) o.comments.push({ by: u.name, at: now(), text: b.comment })
   mail([...o.notifyEmails, u.email], `Inbound #${o.id} approved`); log(u, 'inbound.approve', `#${o.id}`); return o
 })
-R('POST', '/inbound/(\\d+)/reject', ['inbound.approve'], (u, b, m) => { const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); Object.assign(o, { status: 'rejected', decidedBy: actor(u) }); o.comments.push({ by: u.name, at: now(), text: b.comment }); return o })
+R('POST', '/inbound/(\\d+)/reject', ['inbound.approve'], (u, b, m) => { const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed'); Object.assign(o, { status: 'rejected', decidedBy: actor(u) }); o.comments.push({ by: u.name, at: now(), text: b.comment }); return o })
 // ---- transfers
 R('GET', '/transfers', ['transfers.view'], (_u, _b, _m, q) => db.transfers.filter((o: A) => !q.status || o.status === q.status).slice().reverse())
-R('POST', '/transfers', ['transfers.create'], (u, b) => { if (b.fromLocationId === b.toLocationId) throw err(400, 'Source and destination must differ'); const o = { id: db.id('t'), fromLocationId: b.fromLocationId, toLocationId: b.toLocationId, note: b.note ?? '', lines: build(b.lines), status: 'draft', createdBy: actor(u) }; db.transfers.push(o); return o })
-R('POST', '/transfers/(\\d+)/submit', ['transfers.create'], (u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); for (const l of o.lines) apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: u.id, refType: 'transfer', refId: o.id }); Object.assign(o, { status: 'in_transit', submittedBy: actor(u) }); return o })
-R('POST', '/transfers/(\\d+)/cancel', ['transfers.create'], (_u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, 'Only drafts can be cancelled'); o.status = 'cancelled'; return o })
+R('POST', '/transfers', ['transfers.create'], (u, b) => { if (b.fromLocationId === b.toLocationId) throw err(400, T("Choose two different locations - the source and destination can't be the same."), 'validation', [{ field: 'toLocationId', message: T('Pick a different destination.') }]); const o = { id: db.id('t'), fromLocationId: b.fromLocationId, toLocationId: b.toLocationId, note: b.note ?? '', lines: build(b.lines), status: 'draft', createdBy: actor(u) }; db.transfers.push(o); return o })
+R('POST', '/transfers/(\\d+)/submit', ['transfers.create'], (u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed'); for (const l of o.lines) apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: u.id, refType: 'transfer', refId: o.id }); Object.assign(o, { status: 'in_transit', submittedBy: actor(u) }); return o })
+R('POST', '/transfers/(\\d+)/cancel', ['transfers.create'], (_u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, T('Only draft transfers can be cancelled. This one has already been sent.'), 'already_processed'); o.status = 'cancelled'; return o })
 R('POST', '/transfers/(\\d+)/receive', ['transfers.receive'], (u, b, m) => {
-  const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'in_transit') throw err(409, `Order is ${o.status}, not in transit`)
+  const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'in_transit') throw err(409, T('This transfer is {status}, so it cannot be received. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed')
   const received = b.received ? build(b.received, true) : o.lines
   const discrepancy = o.lines.map((l: A) => ({ productId: l.productId, sent: l.qty, received: received.find((x: A) => x.productId === l.productId)?.qty ?? 0 })).filter((d: A) => d.sent !== d.received)
-  if (discrepancy.length && !b.comment) throw err(400, 'Received quantities differ from what was sent - a comment is required')
+  if (discrepancy.length && !b.comment) throw err(400, T('The received quantities differ from what was sent. Please add a comment explaining why.'), 'validation', [{ field: 'comment', message: T('A comment is required when quantities differ.') }])
   for (const l of received) if (l.qty > 0) apply(l.productId, o.toLocationId, { onHand: l.qty }, { type: 'transfer_in', userId: u.id, refType: 'transfer', refId: o.id })
   Object.assign(o, { status: 'received', receivedLines: received, discrepancy, receivedBy: { ...actor(u), locationId: o.toLocationId, location: db.locations.find((l: A) => l.id === o.toLocationId)?.name } }); return o
 })
@@ -194,35 +205,35 @@ const release = (o: A, uid: number, refType: string) => { for (const l of o.line
 const allocate = (lines: A[], loc: number, uid: number, id: number) => { for (const l of lines) apply(l.productId, loc, { reserved: l.qty }, { type: 'reserve', userId: uid, refType: 'outbound', refId: id }) }
 R('GET', '/reserves', ['reserves.view'], (u, _b, _m, q) => db.reserves.filter((o: A) => !q.status || o.status === q.status).slice().reverse().map((o: A) => wc(u, o)))
 R('POST', '/reserves', ['reserves.create'], (u, b) => { const lines = build(b.lines); const o = { id: db.id('r'), locationId: b.locationId, clientId: b.clientId, note: b.note ?? '', lines, status: 'active', createdBy: actor(u) }; for (const l of lines) apply(l.productId, b.locationId, { reserved: l.qty }, { type: 'reserve', userId: u.id, refType: 'reserve', refId: o.id }); db.reserves.push(o); mail([u.email], `Reserve order #${o.id} placed`); return wc(u, o) })
-R('POST', '/reserves/(\\d+)/cancel', ['reserves.convert'], (u, _b, m) => { const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); release(o, u.id, 'reserve'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
+R('POST', '/reserves/(\\d+)/cancel', ['reserves.convert'], (u, _b, m) => { const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed'); release(o, u.id, 'reserve'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
 R('POST', '/reserves/(\\d+)/convert', ['reserves.convert', 'outbound.create'], (u, b, m) => {
-  const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed')
-  if (!o.clientId) throw err(400, 'Attach a client to the reserve order before converting it to outbound')
+  const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed')
+  if (!o.clientId) throw err(400, T('Choose a client for this reserve order before moving it to outbound.'), 'validation', [{ field: 'clientId', message: T('A client is required.') }])
   const actual = build(b.actual, true); const lines = o.lines.map((l: A) => { const a = actual.find((x: A) => x.productId === l.productId)?.qty ?? 0; return { ...l, actualQty: a, difference: l.qty - a } })
-  const ship = actual.filter((a: A) => a.qty > 0); if (!ship.length) throw err(400, 'Nothing to ship - cancel the reserve order instead')
-  if (lines.some((l: A) => l.difference) && !b.comment) throw err(400, 'Actual quantities differ from reserved - a comment is required')
+  const ship = actual.filter((a: A) => a.qty > 0); if (!ship.length) throw err(400, T('Every quantity is zero, so there is nothing to ship. Release the reservation instead.'))
+  if (lines.some((l: A) => l.difference) && !b.comment) throw err(400, T('The quantities leaving differ from what was reserved. Please add a comment explaining why.'), 'validation', [{ field: 'comment', message: T('A comment is required when quantities differ.') }])
   release(o, u.id, 'reserve'); const ob = { id: db.id('o'), locationId: o.locationId, clientId: o.clientId, note: b.comment ?? '', lines: ship, status: 'saved', sourceReserveId: o.id, createdBy: actor(u) }
   allocate(ship, o.locationId, u.id, ob.id); db.outbound.push(ob); Object.assign(o, { lines, status: 'converted', outboundId: ob.id, closedBy: actor(u) }); return { reserve: wc(u, o), outbound: wc(u, ob) }
 })
 R('GET', '/outbound', ['outbound.view'], (u, _b, _m, q) => db.outbound.filter((o: A) => !q.status || o.status === q.status).slice().reverse().map((o: A) => wc(u, o)))
 R('POST', '/outbound', ['outbound.create'], (u, b) => { const lines = build(b.lines); const o = { id: db.id('o'), locationId: b.locationId, clientId: b.clientId, note: b.note ?? '', lines, status: 'saved', createdBy: actor(u) }; allocate(lines, b.locationId, u.id, o.id); db.outbound.push(o); return wc(u, o) })
-R('PUT', '/outbound/(\\d+)', ['outbound.create'], (u, b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, 'Only saved orders can be edited'); const lines = build(b.lines); release(o, u.id, 'outbound'); allocate(lines, o.locationId, u.id, o.id); Object.assign(o, { clientId: b.clientId, note: b.note ?? '', lines }); return wc(u, o) })
-R('POST', '/outbound/(\\d+)/confirm', ['outbound.confirm'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); for (const l of o.lines) apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: u.id, refType: 'outbound', refId: o.id }); Object.assign(o, { status: 'confirmed', confirmedBy: actor(u) }); mail([u.email], `Outbound #${o.id} confirmed`); return wc(u, o) })
-R('POST', '/outbound/(\\d+)/cancel', ['outbound.create'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); release(o, u.id, 'outbound'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
+R('PUT', '/outbound/(\\d+)', ['outbound.create'], (u, b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, T('Only saved orders can be edited. This one has already been confirmed or cancelled.'), 'already_processed'); const lines = build(b.lines); release(o, u.id, 'outbound'); allocate(lines, o.locationId, u.id, o.id); Object.assign(o, { clientId: b.clientId, note: b.note ?? '', lines }); return wc(u, o) })
+R('POST', '/outbound/(\\d+)/confirm', ['outbound.confirm'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed'); for (const l of o.lines) apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: u.id, refType: 'outbound', refId: o.id }); Object.assign(o, { status: 'confirmed', confirmedBy: actor(u) }); mail([u.email], `Outbound #${o.id} confirmed`); return wc(u, o) })
+R('POST', '/outbound/(\\d+)/cancel', ['outbound.create'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, T('This order was already {status}, possibly by someone else. Refresh the page to see the latest.', { status: statusWord(o.status) }), 'already_processed'); release(o, u.id, 'outbound'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
 // ---- adjustments / audits
 R('GET', '/adjustments', ['adjustments.view'], () => db.adjustments.map((a: A) => ({ ...a, status: a.status ?? 'approved' })).reverse())
 R('POST', '/adjustments', ['adjustments.create'], (u, b) => {
-  const s = stockRow(b.productId, b.locationId); const delta = r3(b.newQty - s.onHand); if (!delta) throw err(400, 'Quantity is unchanged'); if (String(b.reason ?? '').trim().length < 3) throw err(400, 'reason: too short')
-  if (b.newQty < s.reserved) throw err(409, `Cannot go below the ${s.reserved} units already reserved here`)
+  const s = stockRow(b.productId, b.locationId); const delta = r3(b.newQty - s.onHand); if (!delta) throw err(400, T('That is the same as the current stock, so there is nothing to adjust.'), 'validation', [{ field: 'newQty', message: T('Enter a different quantity.') }]); if (String(b.reason ?? '').trim().length < 3) throw err(400, T('{msg}.', { msg: T('{label} must be at least {n} characters', { label: T('Reason'), n: 3 }) }), 'validation')
+  if (b.newQty < s.reserved) throw err(409, T("Stock can't go below {reserved}, because that many units are already reserved here. Release the reservation first or enter {reserved} or more.", { reserved: s.reserved }), 'insufficient_stock')
   const sub = submission(u); const a = { id: db.id('a'), ...b, before: s.onHand, delta, by: sub.submittedBy, status: sub.status, decidedBy: (sub as A).decidedBy }
   if (sub.status === 'approved') apply(b.productId, b.locationId, { onHand: delta }, { type: 'adjustment', userId: u.id, refType: 'adjustment', refId: a.id, note: b.reason })
   db.adjustments.push(a); log(u, 'adjustment.request', `${sku(b.productId)} ${delta}`); return a
 })
 R('GET', '/audits', ['audits.view'], () => db.audits.slice().reverse().map((a: A) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: a.lines.filter((l: A) => l.counted != null && l.counted !== l.system).length })))
 R('GET', '/audits/(\\d+)', ['audits.view'], (_u, _b, m) => find(db.audits, m[1], 'Audit'))
-R('POST', '/audits', ['audits.create'], (u, b) => { const locs = db.locations.filter((l: A) => approved(l) && l.active && (!b.locationId || l.id === b.locationId)); const lines = locs.flatMap((l: A) => db.products.filter((p: A) => approved(p) && p.active).map((p: A) => ({ productId: p.id, locationId: l.id, system: stockRow(p.id, l.id).onHand, counted: null }))); const a = { id: db.id('au'), name: b.name || `Audit ${now().slice(0, 10).replace(/-/g, '')}`, lines, status: 'counting', createdBy: actor(u) }; db.audits.push(a); return a })
-R('PUT', '/audits/(\\d+)/counts', ['audits.count'], (_u, b, m) => { const a = find(db.audits, m[1], 'Audit'); if (a.status !== 'counting') throw err(409, 'Audit is no longer open for counting'); for (const c of b.counts) { const l = a.lines.find((x: A) => x.productId === c.productId && x.locationId === c.locationId); if (l) l.counted = c.counted } return a })
-R('POST', '/audits/(\\d+)/submit', ['audits.count'], (u, _b, m) => { const a = find(db.audits, m[1], 'Audit'); if (a.status !== 'counting') throw err(409, 'Audit has already been submitted'); if (a.lines.some((l: A) => l.counted == null)) throw err(400, 'Enter a physical count for every line before submitting'); Object.assign(a, { status: 'submitted', submittedBy: actor(u) }); return a })
+R('POST', '/audits', ['audits.create'], (u, b) => { const locs = db.locations.filter((l: A) => approved(l) && l.active && (!b.locationId || l.id === b.locationId)); const lines = locs.flatMap((l: A) => db.products.filter((p: A) => approved(p) && p.active).map((p: A) => ({ productId: p.id, locationId: l.id, system: stockRow(p.id, l.id).onHand, counted: null }))); const a = { id: db.id('au'), name: b.name || `${t('Audit')} ${now().slice(0, 10).replace(/-/g, '')}`, lines, status: 'counting', createdBy: actor(u) }; db.audits.push(a); return a })
+R('PUT', '/audits/(\\d+)/counts', ['audits.count'], (_u, b, m) => { const a = find(db.audits, m[1], 'Audit'); if (a.status !== 'counting') throw err(409, T('This audit has already been submitted, so the counts can no longer be changed.'), 'already_processed'); for (const c of b.counts) { const l = a.lines.find((x: A) => x.productId === c.productId && x.locationId === c.locationId); if (l) l.counted = c.counted } return a })
+R('POST', '/audits/(\\d+)/submit', ['audits.count'], (u, _b, m) => { const a = find(db.audits, m[1], 'Audit'); if (a.status !== 'counting') throw err(409, T('This audit was already submitted.'), 'already_processed'); if (a.lines.some((l: A) => l.counted == null)) throw err(400, T('Enter a physical count for every line before submitting. Lines with no count are still empty.')); Object.assign(a, { status: 'submitted', submittedBy: actor(u) }); return a })
 // ---- owner approvals
 const kinds: Record<string, A[]> = { product: [], location: [], adjustment: [], audit: [] }
 const stores = () => ({ product: db.products, location: db.locations, adjustment: db.adjustments, audit: db.audits }) as Record<string, A[]>
@@ -230,11 +241,11 @@ const stOf = (k: string, o: A) => (k === 'audit' ? (o.status === 'submitted' ? '
 const lname = (id: number) => db.locations.find((l: A) => l.id === id)?.name ?? `#${id}`
 const presentA = (k: string, o: A) => {
   const base = { type: k, id: o.id, status: stOf(k, o), submittedBy: k === 'adjustment' ? o.by : o.submittedBy, decidedBy: o.decidedBy, decisionComment: o.decisionComment }
-  if (k === 'product') return { ...base, title: plabel(o), summary: [o.color, o.size, o.weight && `weight ${o.weight}`, o.caseSize ? `case pack ${o.caseSize}` : 'no case pack', `measured in ${o.uom}`].filter(Boolean).join(' · '), details: {} }
-  if (k === 'location') return { ...base, title: o.name, summary: o.address || 'No address', details: {} }
-  if (k === 'adjustment') return { ...base, title: `${sku(o.productId)} @ ${lname(o.locationId)}`, summary: `${o.delta > 0 ? 'Add' : 'Remove'} ${Math.abs(o.delta)} (system showed ${o.before} when requested) - ${o.reason}`, details: {} }
+  if (k === 'product') return { ...base, title: plabel(o), details: { sku: o.sku, description: o.description, color: o.color, size: o.size, weight: o.weight, caseSize: o.caseSize, uom: o.uom } }
+  if (k === 'location') return { ...base, title: o.name, details: { address: o.address } }
+  if (k === 'adjustment') return { ...base, title: `${sku(o.productId)} @ ${lname(o.locationId)}`, details: { before: o.before, delta: o.delta, newQty: o.newQty, reason: o.reason } }
   const diffs = o.lines.filter((l: A) => l.counted != null && l.counted !== l.system).map((l: A) => ({ product: sku(l.productId), location: lname(l.locationId), system: l.system, counted: l.counted, delta: l.counted - l.system }))
-  return { ...base, title: o.name, summary: `${diffs.length} difference(s) across ${o.lines.length} counted lines`, details: { differences: diffs } }
+  return { ...base, title: o.name, details: { differences: diffs, lineCount: o.lines.length } }
 }
 R('GET', '/approvals', ['approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count'], (u, _b, _m, q) => {
   const owner = isOwner(u); const out: A[] = []
@@ -243,9 +254,9 @@ R('GET', '/approvals', ['approvals.manage', 'products.create', 'locations.manage
   return { owner, pending: out.filter((o) => o.status === 'pending').length, items: out }
 })
 const decide = (approve: boolean): H => (u, b, m) => {
-  const k = m[1]; const list = stores()[k]; if (!list) throw err(404, 'Request type not found')
-  const o = find(list, m[2], 'Request'); if (stOf(k, o) !== 'pending') throw err(409, 'This request has already been decided. Refresh the page to see the latest.', 'already_processed')
-  if (!approve && !String(b.comment ?? '').trim()) throw err(400, 'comment: A reason is required')
+  const k = m[1]; const list = stores()[k]; if (!list) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T('That kind of request') }), 'not_found')
+  const o = find(list, m[2], 'Request'); if (stOf(k, o) !== 'pending') throw err(409, T('This request has already been decided. Refresh the page to see the latest.'), 'already_processed')
+  if (!approve && !String(b.comment ?? '').trim()) throw err(400, T('{msg}.', { msg: T('{label} cannot be empty', { label: T('Comment') }) }), 'validation')
   if (approve && k === 'adjustment') apply(o.productId, o.locationId, { onHand: o.delta }, { type: 'adjustment', userId: u.id, refType: 'adjustment', refId: o.id, note: o.reason })
   if (approve && k === 'audit') { const ch: A[] = []; for (const l of o.lines) { const d = r3(l.counted - l.system); if (d) { apply(l.productId, l.locationId, { onHand: d }, { type: 'audit', userId: u.id, refType: 'audit', refId: o.id }); ch.push({ productId: l.productId, locationId: l.locationId, system: l.system, counted: l.counted, delta: d }) } } o.changes = ch; mail([u.email], `Inventory audit "${o.name}" approved`) }
   Object.assign(o, { status: approve ? 'approved' : 'rejected', decidedBy: actor(u), decisionComment: b.comment || undefined }); log(u, `${k}.${approve ? 'approve' : 'reject'}`, String(o.id)); return presentA(k, o)
@@ -279,11 +290,11 @@ R('GET', '/dashboard', ['dashboard.view'], (_u, _b, _m, q) => {
 })
 R('GET', '/products/(\\d+)/overview', ['products.view'], (_u, _b, m, q) => {
   const p = find(db.products.filter(approved), m[1], 'Product'); const L = (id: number) => db.locations.find((l: A) => l.id === id)?.name, U = (id: number) => db.users.find((u: A) => u.id === id)?.name
-  const A = new Map<number, string>(db.audits.map((a: A) => [a.id, a.name])); const ref = (x: A) => (x.refType === 'audit' ? A.get(x.refId) ?? `Audit #${x.refId}` : x.refType === 'adjustment' ? x.note ?? 'Adjustment' : x.refType ? `${x.refType} #${x.refId}` : x.note ?? '')
+  const A = new Map<number, string>(db.audits.map((a: A) => [a.id, a.name])); const ref = (x: A) => (x.refType === 'audit' ? A.get(x.refId) : undefined)
   const rowsL = db.stock.filter((s: A) => s.productId === p.id).map((s: A) => ({ locationId: s.locationId, location: L(s.locationId), onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null }))
   const avail = rowsL.reduce((a: number, r: A) => a + r.available, 0)
   return { product: p, byLocation: rowsL, totals: { onHand: rowsL.reduce((a: number, r: A) => a + r.onHand, 0), reserved: rowsL.reduce((a: number, r: A) => a + r.reserved, 0), available: avail, boxes: p.caseSize ? Math.ceil(avail / p.caseSize) : null },
-    movements: db.movements.filter((x: A) => x.productId === p.id && (!q.locationId || x.locationId === +q.locationId)).slice().reverse().slice(0, 200).map((x: A) => ({ ...x, location: L(x.locationId), user: U(x.userId), refLabel: ref(x) })) }
+    movements: db.movements.filter((x: A) => x.productId === p.id && (!q.locationId || x.locationId === +q.locationId)).slice().reverse().slice(0, 200).map((x: A) => ({ ...x, location: L(x.locationId), user: U(x.userId), refName: ref(x) })) }
 })
 R('GET', '/reports/inventory', ['reports.inventory'], (_u, _b, _m, q) => {
   const rows = db.stock.filter((s: A) => !q.locationId || s.locationId === +q.locationId).map((s: A) => { const p = db.products.find((x: A) => x.id === s.productId); return { SKU: p.sku, Product: p.name ?? p.sku, Variation: variation(p), Weight: p.weight ?? '', Location: db.locations.find((l: A) => l.id === s.locationId)?.name, 'Case pack': p.caseSize ?? '', UOM: p.uom, 'On hand': s.onHand, Reserved: s.reserved, Available: s.onHand - s.reserved, Boxes: p.caseSize ? Math.ceil(s.onHand / p.caseSize) : '' } })
@@ -310,16 +321,16 @@ export async function demoHandle(method: string, fullPath: string, body: A): Pro
   const path = fullPath.split('?')[0], q = qs(fullPath)
   if (method === 'POST' && path === '/auth/login') {
     const u = db.users.find((x: A) => x.email.toLowerCase() === String(body.email).toLowerCase())
-    if (!u || !u.active || u.password !== body.password) throw err(401, 'Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.', 'invalid_credentials')
+    if (!u || !u.active || u.password !== body.password) throw err(401, T('Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.'), 'invalid_credentials')
     sessionStorage.setItem('wms-demo-user', String(u.id)); u.lastLoginAt = now(); log(u, 'auth.login'); save(); return { user: pub(u), csrf: 'demo' }
   }
   for (const [m, re, perm, h] of routes) {
     const match = m === method ? path.match(re) : null; if (!match) continue
     const u = db.users.find((x: A) => x.id === curId() && x.active)
-    if (!u) throw err(401, 'Please sign in to continue.', 'unauthenticated')
-    if (u.mustChangePassword && !['/auth/me', '/auth/password', '/auth/logout'].includes(path)) throw err(403, 'You must set a new password before you can continue.', 'password_change_required')
-    if (perm === 'super' ? u.role !== 'super_admin' : perm && !can(u, ...perm)) throw err(403, "You don't have permission to do this. Ask a super admin to grant you access.", perm === 'super' ? 'super_admin_only' : 'forbidden')
+    if (!u) throw err(401, T('Please sign in to continue.'), 'unauthenticated')
+    if (u.mustChangePassword && !['/auth/me', '/auth/password', '/auth/logout'].includes(path)) throw err(403, T('You must set a new password before you can continue.'), 'password_change_required')
+    if (perm === 'super' ? u.role !== 'super_admin' : perm && !can(u, ...perm)) throw err(403, perm === 'super' ? T('Only a super admin can do this.') : T("You don't have permission to do this. Ask a super admin to grant you access."), perm === 'super' ? 'super_admin_only' : 'forbidden')
     const out = h(u, body ?? {}, match, q); save(); return JSON.parse(JSON.stringify(out ?? null))
   }
-  throw err(404, "That page or action doesn't exist.", 'not_found')
+  throw err(404, T("That page or action doesn't exist."), 'not_found')
 }

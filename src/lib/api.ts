@@ -1,3 +1,4 @@
+import { getLang } from '@/i18n'
 /** Small fetch wrapper: same-origin cookies (httpOnly session), CSRF header on writes, typed errors. */
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string, public fields?: { field: string; message: string }[], public requestId?: string) { super(message) }
@@ -24,7 +25,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
       method,
       credentials: 'same-origin',
       signal: ctl.signal,
-      headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(method !== 'GET' ? { 'X-CSRF-Token': csrf } : {}) },
+      headers: { Accept: 'application/json', 'Accept-Language': getLang(), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(method !== 'GET' ? { 'X-CSRF-Token': csrf } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   } catch (e) {

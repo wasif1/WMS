@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { T, render, statusWord } from '../i18n/index.js'
 import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
@@ -12,10 +13,10 @@ import { config } from '../config.js'
 
 const MAX_FAILS = 5
 const LOCK_MS = 15 * 60_000
-const GENERIC = 'Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.'
+const GENERIC = T('Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.')
 
 export const publicUser = (u: User) => ({
-  id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen,
+  id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen, language: u.language,
   permissions: effectivePerms(u), mustChangePassword: u.mustChangePassword,
   totpEnabled: !!u.totpSecret, mfaSetupRequired: config.requireMfa && !u.totpSecret,
   lastLoginAt: u.lastLoginAt, createdAt: u.createdAt, locked: !!u.lockedUntil && u.lockedUntil > Date.now(),
@@ -23,7 +24,7 @@ export const publicUser = (u: User) => ({
 
 export function authRoutes(ctx: Ctx) {
   const r = Router()
-  const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many sign-in attempts. Please wait about 15 minutes and try again.', code: 'rate_limited' } })
+  const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, handler: (req, res) => { res.status(429).json({ error: render(T('Too many sign-in attempts. Please wait about 15 minutes and try again.'), (req as any).lang ?? 'en'), code: 'rate_limited' }) } })
   const pendingMfa = new Map<string, { userId: number; exp: number; tries: number }>()
 
   const finishLogin = (req: any, res: any, user: User) => {
@@ -58,14 +59,14 @@ export function authRoutes(ctx: Ctx) {
   r.post('/login/mfa', loginLimiter, wrap(async (req, res) => {
     const { mfaToken, code } = parse(z.object({ mfaToken: z.string().max(100), code: z.string().max(10) }).strict(), req.body)
     const p = pendingMfa.get(mfaToken)
-    if (!p || p.exp < Date.now()) throw new AppError(401, 'That verification step expired. Please sign in again.', 'mfa_expired')
+    if (!p || p.exp < Date.now()) throw new AppError(401, T("That verification step expired. Please sign in again."), 'mfa_expired')
     const user = ctx.db.users.get(p.userId) as User | undefined
-    if (!user || !user.active || !user.totpSecret) throw new AppError(401, 'We could not verify that sign-in. Please sign in again.', 'mfa_failed')
+    if (!user || !user.active || !user.totpSecret) throw new AppError(401, T("We could not verify that sign-in. Please sign in again."), 'mfa_failed')
     const step = verifyTotp(user.totpSecret, code)
     if (step === null || (user.totpLastStep !== undefined && step <= user.totpLastStep)) {
       if (++p.tries >= 5) pendingMfa.delete(mfaToken)
       fail(user)
-      throw new AppError(401, 'Incorrect code. Check that the clock on your phone is correct, then try the newest code.', 'invalid_code')
+      throw new AppError(401, T("Incorrect code. Check that the clock on your phone is correct, then try the newest code."), 'invalid_code')
     }
     pendingMfa.delete(mfaToken)
     res.json(finishLogin(req, res, { ...user, totpLastStep: step }))
@@ -84,8 +85,8 @@ export function authRoutes(ctx: Ctx) {
   r.post('/password', auth, wrap(async (req, res) => {
     const { currentPassword, newPassword } = parse(z.object({ currentPassword: z.string().max(256), newPassword: z.string().max(256) }).strict(), req.body)
     const u = req.user!
-    if (!(await verifyPassword(currentPassword, u.passwordHash))) throw new AppError(400, 'Your current password is incorrect.', 'wrong_password', [{ field: 'currentPassword', message: 'Your current password is incorrect.' }])
-    if (currentPassword === newPassword) throw bad('Choose a new password that is different from your current one.', 'weak_password', [{ field: 'newPassword', message: 'Choose a password you have not used just now.' }])
+    if (!(await verifyPassword(currentPassword, u.passwordHash))) throw new AppError(400, T("Your current password is incorrect."), 'wrong_password', [{ field: 'currentPassword', message: T("Your current password is incorrect.") }])
+    if (currentPassword === newPassword) throw bad(T("Choose a new password that is different from your current one."), 'weak_password', [{ field: 'newPassword', message: T("Choose a password you have not used just now.") }])
     checkPassword(newPassword, u)
     ctx.db.users.update(u.id, { ...u, passwordHash: await hashPassword(newPassword), mustChangePassword: false }, { email_idx: blindIndex(u.email, 'email') })
     destroyUserSessions(ctx, u.id, req.sessionId) // sign out every other device
@@ -93,9 +94,16 @@ export function authRoutes(ctx: Ctx) {
     res.json({ ok: true })
   }))
 
+  r.post('/language', auth, wrap((req, res) => {
+    const { language } = parse(z.object({ language: z.enum(['en', 'ur']) }).strict(), req.body)
+    const u = req.user!
+    ctx.db.users.update(u.id, { ...u, language }, { email_idx: blindIndex(u.email, 'email') })
+    res.json({ ok: true, language })
+  }))
+
   r.post('/totp/setup', auth, wrap((req, res) => {
     const u = req.user!
-    if (u.totpSecret) throw bad('Two-factor authentication is already turned on for your account.')
+    if (u.totpSecret) throw bad(T("Two-factor authentication is already turned on for your account."))
     const secret = newTotpSecret()
     ctx.db.users.update(u.id, { ...u, totpPending: secret }, { email_idx: blindIndex(u.email, 'email') })
     const url = `otpauth://totp/WMS:${encodeURIComponent(u.email)}?secret=${secret}&issuer=WMS&algorithm=SHA1&digits=6&period=30`
@@ -106,7 +114,7 @@ export function authRoutes(ctx: Ctx) {
     const { code } = parse(z.object({ code: z.string().max(10) }).strict(), req.body)
     const u = req.user!
     const step = u.totpPending ? verifyTotp(u.totpPending, code) : null
-    if (step === null) throw bad('That code is not correct. Check the newest code in your authenticator app and try again.', 'invalid_code')
+    if (step === null) throw bad(T("That code is not correct. Check the newest code in your authenticator app and try again."), 'invalid_code')
     ctx.db.users.update(u.id, { ...u, totpSecret: u.totpPending, totpPending: undefined, totpLastStep: step }, { email_idx: blindIndex(u.email, 'email') })
     ctx.audit.log(u, 'auth.totp_enabled')
     res.json({ ok: true })
@@ -115,8 +123,8 @@ export function authRoutes(ctx: Ctx) {
   r.post('/totp/disable', auth, wrap(async (req, res) => {
     const { password, code } = parse(z.object({ password: z.string().max(256), code: z.string().max(10) }).strict(), req.body)
     const u = req.user!
-    if (config.requireMfa) throw bad('Two-factor authentication is required on this system, so it cannot be turned off.')
-    if (!u.totpSecret || !(await verifyPassword(password, u.passwordHash)) || verifyTotp(u.totpSecret, code) === null) throw bad('Your password or code is not correct. Please check both and try again.', 'invalid_code')
+    if (config.requireMfa) throw bad(T("Two-factor authentication is required on this system, so it cannot be turned off."))
+    if (!u.totpSecret || !(await verifyPassword(password, u.passwordHash)) || verifyTotp(u.totpSecret, code) === null) throw bad(T("Your password or code is not correct. Please check both and try again."), 'invalid_code')
     ctx.db.users.update(u.id, { ...u, totpSecret: undefined }, { email_idx: blindIndex(u.email, 'email') })
     ctx.audit.log(u, 'auth.totp_disabled')
     res.json({ ok: true })

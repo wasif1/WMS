@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { t } from '@/i18n'
 import { AlertTriangle, Home, RefreshCw, WifiOff } from 'lucide-react'
 
 /** The page's code could not be downloaded (connection dropped, or a new version was deployed). */
@@ -21,17 +22,17 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="card max-w-md space-y-4 p-8 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">{chunk ? <WifiOff className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}</div>
           {chunk ? (<>
-            <h2 className="text-lg font-semibold">We couldn't load this page</h2>
-            <p className="text-sm text-slate-600">Your internet connection may have dropped, or a newer version of the system was released. Check your connection and reload the page. Nothing you did was lost.</p>
-            <button className="btn-primary" onClick={() => window.location.reload()}><RefreshCw className="h-4 w-4" />Reload the page</button>
+            <h2 className="text-lg font-semibold">{t("We couldn't load this page")}</h2>
+            <p className="text-sm text-slate-600">{t("Your internet connection may have dropped, or a newer version of the system was released. Check your connection and reload the page. Nothing you did was lost.")}</p>
+            <button className="btn-primary" onClick={() => window.location.reload()}><RefreshCw className="h-4 w-4" />{t("Reload the page")}</button>
           </>) : (<>
-            <h2 className="text-lg font-semibold">This page ran into a problem</h2>
-            <p className="text-sm text-slate-600">Something went wrong while showing this screen. Your data is safe - nothing was lost or changed. Try again, or go back to the dashboard.</p>
+            <h2 className="text-lg font-semibold">{t("This page ran into a problem")}</h2>
+            <p className="text-sm text-slate-600">{t("Something went wrong while showing this screen. Your data is safe - nothing was lost or changed. Try again, or go back to the dashboard.")}</p>
             <div className="flex flex-wrap justify-center gap-2">
-              <button className="btn-primary" onClick={() => this.setState({ error: null })}><RefreshCw className="h-4 w-4" />Try again</button>
-              <button className="btn-secondary" onClick={() => { window.location.href = window.location.pathname + (window.location.hash ? '#/' : '') }}><Home className="h-4 w-4" />Go to dashboard</button>
+              <button className="btn-primary" onClick={() => this.setState({ error: null })}><RefreshCw className="h-4 w-4" />{t("Try again")}</button>
+              <button className="btn-secondary" onClick={() => { window.location.href = window.location.pathname + (window.location.hash ? '#/' : '') }}><Home className="h-4 w-4" />{t("Go to dashboard")}</button>
             </div>
-            <button className="text-xs text-slate-400 underline" onClick={() => window.location.reload()}>Reload the page</button>
+            <button className="text-xs text-slate-400 underline" onClick={() => window.location.reload()}>{t("Reload the page")}</button>
           </>)}
         </div>
       </div>

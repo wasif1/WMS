@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express'
+import { T, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { hasPerm, requirePerm } from '../auth.js'
@@ -29,15 +30,16 @@ export function approvalRoutes(ctx: Ctx, inv: Inventory) {
   }
   const submitter = (kind: Kind, o: any): Actor | undefined => (kind === 'adjustment' ? o.by : kind === 'audit' ? o.submittedBy : o.submittedBy)
 
+  /** Structured data only - the screen builds the sentences, so they can be shown in any language. */
   const present = (kind: Kind, o: any) => {
     const base = { type: kind, id: o.id, status: statusOf(kind, o), submittedBy: submitter(kind, o), decidedBy: o.decidedBy, decisionComment: o.decisionComment }
     switch (kind) {
-      case 'product': return { ...base, title: productLabel(o), summary: [o.color, o.size, o.weight && `weight ${o.weight}`, o.caseSize ? `case pack ${o.caseSize}` : 'no case pack', `measured in ${o.uom}`].filter(Boolean).join(' · '), details: { sku: o.sku, description: o.description } }
-      case 'location': return { ...base, title: o.name, summary: o.address || 'No address', details: {} }
-      case 'adjustment': return { ...base, title: `${prodLabel(o.productId)} @ ${locName(o.locationId)}`, summary: `${o.delta > 0 ? 'Add' : 'Remove'} ${Math.abs(o.delta)} (system showed ${o.before} when requested) - ${o.reason}`, details: { before: o.before, delta: o.delta, newQty: o.newQty, reason: o.reason } }
+      case 'product': return { ...base, title: productLabel(o), details: { sku: o.sku, description: o.description, color: o.color, size: o.size, weight: o.weight, caseSize: o.caseSize, uom: o.uom } }
+      case 'location': return { ...base, title: o.name, details: { address: o.address } }
+      case 'adjustment': return { ...base, title: `${prodLabel(o.productId)} @ ${locName(o.locationId)}`, details: { before: o.before, delta: o.delta, newQty: o.newQty, reason: o.reason } }
       case 'audit': {
         const diffs = (o.lines as any[]).filter((l) => l.counted != null && l.counted !== l.system).map((l) => ({ product: prodLabel(l.productId), location: locName(l.locationId), system: l.system, counted: l.counted, delta: l.counted - l.system }))
-        return { ...base, title: o.name, summary: `${diffs.length} difference(s) across ${o.lines.length} counted lines`, details: { differences: diffs } }
+        return { ...base, title: o.name, details: { differences: diffs, lineCount: o.lines.length } }
       }
     }
   }
@@ -67,7 +69,7 @@ export function approvalRoutes(ctx: Ctx, inv: Inventory) {
     const id = idParam(req)
     const o = store(kind).get(id) as any
     if (!o) throw notFound('Request')
-    if (statusOf(kind, o) !== 'pending') throw conflict('This request has already been decided. Refresh the page to see the latest.', 'already_processed')
+    if (statusOf(kind, o) !== 'pending') throw conflict(T("This request has already been decided. Refresh the page to see the latest."), 'already_processed')
     const b = parse(z.object({ comment: approve ? optStr(1000) : z.string().trim().min(1, 'A reason is required').max(1000) }).strict(), req.body)
     const u = req.user!
     const decidedBy = actor(u)

@@ -218,8 +218,8 @@ describe('5 / 7 Product detail & movement history', () => {
     const ov = (await w.owner.call('get', `/api/products/${p.id}/overview`)).body
     expect(ov.totals).toMatchObject({ onHand: 35, available: 35, boxes: 4 })
     expect(ov.byLocation.find((l: any) => l.locationId === A.id)).toMatchObject({ onHand: 25, available: 25, boxes: 3 })
-    expect(ov.movements.find((m: any) => m.type === 'audit').refLabel).toBe('Audit 20261104') // audit NAME, not "Audit #1"
-    expect(ov.movements.map((m: any) => m.refLabel).join()).not.toMatch(/audit #/i)
+    expect(ov.movements.find((m: any) => m.type === 'audit').refName).toBe('Audit 20261104') // audit NAME, not "Audit #1"
+    expect(JSON.stringify(ov.movements)).not.toMatch(/audit #/i)
     const onlyB = (await w.owner.call('get', `/api/products/${p.id}/overview?locationId=${B.id}`)).body
     expect(onlyB.movements).toHaveLength(1); expect(onlyB.movements[0].location).toBe('AWT II')
     expect(onlyB.byLocation).toHaveLength(2) // availability table is not filtered
