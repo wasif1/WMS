@@ -19,14 +19,19 @@ interface Overview {
 
 export default function ProductDetail() {
   const { id } = useParams()
+  return <ProductOverview id={id} />
+}
+
+/** Availability by location + movement history. Used by the product page and the operator's quick-view. */
+export function ProductOverview({ id, hideBack }: { id?: string | number; hideBack?: boolean }) {
   const [loc, setLoc] = useState('')
   const q = useQuery({ queryKey: ['product-overview', id, loc], queryFn: () => get<Overview>(`/products/${id}/overview${loc ? `?locationId=${loc}` : ''}`), placeholderData: (prev) => prev })
   if (q.isLoading) return <PageLoader />
-  if (q.error && !q.data) return <><Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Products</Link><ErrorBox error={q.error} onRetry={() => q.refetch()} /></>
+  if (q.error && !q.data) return <>{!hideBack && <Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Products</Link>}<ErrorBox error={q.error} onRetry={() => q.refetch()} /></>
   const { product: p, totals: t, byLocation, movements } = q.data!
   return (
     <>
-      <Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Products</Link>
+      {!hideBack && <Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Products</Link>}
       <PageHeader title={productLabel(p)} subtitle={[variationOf(p), p.weight, p.caseSize ? `case pack ${p.caseSize}` : 'sold loose', `measured in ${p.uom}`, `SKU ${p.sku}`].filter(Boolean).join(' · ')} actions={p.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>} />
 
       <h2 className="mb-3 text-sm font-semibold">Availability by location</h2>

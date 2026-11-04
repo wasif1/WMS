@@ -30,6 +30,14 @@ const statusText: Record<string, string> = { pending: 'awaiting approval', submi
 export const StatusBadge = ({ status }: { status: string }) => <Badge tone={statusTone[status] ?? 'gray'}>{statusText[status] ?? status.replace('_', ' ')}</Badge>
 
 export const Card = ({ className, children }: { className?: string; children: ReactNode }) => <div className={cn('card', className)}>{children}</div>
+/** Short numbered help shown at the top of a form for staff on the simple screen. */
+export function SimpleSteps({ steps }: { steps: string[] }) {
+  return (
+    <ol className="mb-4 space-y-2 rounded-xl border border-sky-200 bg-sky-50 p-4 text-base text-sky-900" aria-label="How to fill this in">
+      {steps.map((t, i) => <li key={i} className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white">{i + 1}</span><span className="pt-0.5">{t}</span></li>)}
+    </ol>
+  )
+}
 export const Empty = ({ children }: { children: ReactNode }) => <div className="px-4 py-12 text-center text-sm text-slate-500">{children}</div>
 
 export function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: ReactNode }) {

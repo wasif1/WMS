@@ -6,7 +6,7 @@
 import { ALL_KEYS, PERMISSIONS } from '../../server/src/permissions'
 import { ApiError } from './api'
 
-const KEY = 'wms-demo-db-v2', DEMO_PW = 'Demo-Passw0rd-2026'
+const KEY = 'wms-demo-db-v3', DEMO_PW = 'Demo-Passw0rd-2026'
 type A = any
 const now = () => new Date().toISOString()
 const err = (s: number, m: string, code?: string, fields?: { field: string; message: string }[]) => new ApiError(s, m, code, fields)
@@ -16,10 +16,11 @@ function seed(): A {
   const db: A = { seq: {}, users: [], locations: [], products: [], clients: [], stock: [], movements: [], inbound: [], transfers: [], reserves: [], outbound: [], adjustments: [], audits: [], logs: [], outbox: [], settings: { auditEmails: [] } }
   const id = (k: string) => (db.seq[k] = (db.seq[k] ?? 0) + 1)
   db.id = id
-  const user = (name: string, email: string, role: string, permissions: string[]) => db.users.push({ id: id('u'), name, email, role, permissions, password: DEMO_PW, active: true, mustChangePassword: false, totpEnabled: false, createdAt: now() })
+  const user = (name: string, email: string, role: string, permissions: string[], simpleScreen = false) => db.users.push({ id: id('u'), name, email, role, permissions, simpleScreen, password: DEMO_PW, active: true, mustChangePassword: false, totpEnabled: false, createdAt: now() })
   user('Sara Admin', 'super@demo.test', 'super_admin', [])
   user('Dana Dashboard', 'dashboard@demo.test', 'user', ['dashboard.view'])
-  user('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'products.create', 'locations.view', 'locations.manage', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'clients.view'])
+  user('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'products.create', 'locations.view', 'locations.manage', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'clients.view', 'reports.inventory'], true)
+  user('Tara Team', 'team@demo.test', 'user', ['dashboard.view', 'products.view', 'products.create', 'locations.view', 'locations.manage', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'clients.view', 'reports.inventory'])
   user('Mia Manager', 'manager@demo.test', 'admin', ['dashboard.view', 'products.view', 'products.create', 'products.edit', 'inbound.view', 'inbound.approve', 'outbound.view', 'outbound.confirm', 'reports.inventory', 'reports.orders', 'clients.view', 'clients.reveal', 'locations.view', 'adjustments.view', 'audits.view'])
   user('Olivia Owner', 'owner@demo.test', 'admin', ['approvals.manage', 'dashboard.view', 'products.view', 'products.create', 'products.edit', 'locations.view', 'locations.manage', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory', 'reports.orders', 'clients.view'])
   const a = { userId: 1, name: 'Sara Admin', at: now() }
@@ -70,7 +71,7 @@ export const resetDemo = () => { try { localStorage.removeItem(KEY); sessionStor
 
 const curId = () => { try { return Number(sessionStorage.getItem('wms-demo-user')) || 0 } catch { return 0 } }
 const effective = (u: A) => (u.role === 'super_admin' ? [...ALL_KEYS, 'users.manage', 'backups.manage'] : u.permissions)
-const pub = (u: A) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, permissions: effective(u), mustChangePassword: !!u.mustChangePassword, totpEnabled: !!u.totpEnabled, mfaSetupRequired: false, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt, locked: false })
+const pub = (u: A) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen, permissions: effective(u), mustChangePassword: !!u.mustChangePassword, totpEnabled: !!u.totpEnabled, mfaSetupRequired: false, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt, locked: false })
 const can = (u: A, ...p: string[]) => u.role === 'super_admin' || p.some((x) => u.permissions.includes(x))
 const log = (u: A, action: string, detail = '') => db.logs.push({ id: db.id('log'), at: now(), userName: u?.name ?? 'anonymous', action, detail, ip: 'demo' })
 
@@ -126,12 +127,12 @@ R('GET', '/users', 'super', () => db.users.map(pub))
 R('POST', '/users', 'super', (u, b) => {
   if (db.users.some((x: A) => x.email.toLowerCase() === String(b.email).toLowerCase())) throw err(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
   const temp = `Temp-${Math.random().toString(36).slice(2, 10)}-${Math.floor(1000 + Math.random() * 9000)}`
-  const n = { id: db.id('u'), name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions ?? [], password: temp, active: true, mustChangePassword: true, createdAt: now() }
+  const n = { id: db.id('u'), name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions ?? [], simpleScreen: b.role !== 'super_admin' && !!b.simpleScreen, password: temp, active: true, mustChangePassword: true, createdAt: now() }
   db.users.push(n); log(u, 'user.create', n.email); return { user: pub(n), temporaryPassword: temp }
 })
 R('PATCH', '/users/(\\d+)', 'super', (u, b, m) => {
   const t = find(db.users, m[1], 'User'); const wasSuper = t.role === 'super_admin' && t.active
-  const next = { ...t, ...(b.name !== undefined && { name: b.name }), ...(b.role && { role: b.role }), ...(b.permissions && { permissions: b.permissions }), ...(b.active !== undefined && { active: b.active }) }
+  const next = { ...t, ...(b.name !== undefined && { name: b.name }), ...(b.role && { role: b.role }), ...(b.permissions && { permissions: b.permissions }), ...(b.active !== undefined && { active: b.active }), ...(b.simpleScreen !== undefined && { simpleScreen: b.simpleScreen }) }
   if (wasSuper && (next.role !== 'super_admin' || !next.active) && db.users.filter((x: A) => x.role === 'super_admin' && x.active).length <= 1) throw err(400, 'There must be at least one active super admin')
   Object.assign(t, next); log(u, 'user.update', t.email); return pub(t)
 })

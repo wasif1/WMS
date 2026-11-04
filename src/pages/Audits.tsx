@@ -25,7 +25,7 @@ export default function Audits() {
   )
 }
 
-function Create({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
+export function Create({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const { data: locs = [] } = useLocations(); const [name, setName] = useState(''), [loc, setLoc] = useState<number | ''>('')
   const save = useAction(() => post('/audits', { name: name || undefined, locationId: loc || undefined }), { ok: 'Audit sheet generated', invalidate: ['audits'], onSuccess: (a) => onDone(a.id) })
   return (
@@ -36,7 +36,7 @@ function Create({ onClose, onDone }: { onClose: () => void; onDone: (id: number)
   )
 }
 
-function Sheet({ id, onClose }: { id: number; onClose: () => void }) {
+export function Sheet({ id, onClose }: { id: number; onClose: () => void }) {
   const { can } = useAuth(); const { data: prods = [] } = useProducts(); const { data: locs = [] } = useLocations()
   const q = useQuery({ queryKey: ['audit', id], queryFn: () => get<any>(`/audits/${id}`) })
   const [counts, setCounts] = useState<Record<string, string>>({}), [reason, setReason] = useState('')

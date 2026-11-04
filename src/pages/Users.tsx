@@ -7,10 +7,10 @@ import { useAction } from '@/lib/hooks'
 import type { Me, PermDef } from '@/lib/types'
 import { fmtDate } from '@/lib/utils'
 
-const PRESETS: { name: string; desc: string; role: 'admin' | 'user'; perms: (all: PermDef[]) => string[] }[] = [
+const PRESETS: { name: string; desc: string; role: 'admin' | 'user'; simple?: boolean; perms: (all: PermDef[]) => string[] }[] = [
   { name: 'Dashboard only', desc: 'Sees KPIs, nothing else', role: 'user', perms: () => ['dashboard.view'] },
   { name: 'Viewer', desc: 'Read-only access to inventory & orders', role: 'user', perms: (a) => a.map((p) => p.key).filter((k) => k.endsWith('.view') && k !== 'logs.view') },
-  { name: 'Warehouse operator', desc: 'Receive, transfer, reserve, count', role: 'user', perms: () => ['dashboard.view', 'products.view', 'locations.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'audits.view', 'audits.count', 'clients.view', 'adjustments.create', 'adjustments.view', 'products.create', 'locations.manage'] },
+  { name: 'Warehouse operator', desc: 'Receive, transfer, reserve, count - gets the simple one-page screen', role: 'user', simple: true, perms: () => ['dashboard.view', 'products.view', 'locations.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'audits.view', 'audits.count', 'clients.view', 'adjustments.create', 'adjustments.view', 'products.create', 'locations.manage'] },
   { name: 'Manager', desc: 'Everything except owner approvals, real client data & logs', role: 'admin', perms: (a) => a.map((p) => p.key).filter((k) => !['clients.reveal', 'logs.view', 'approvals.manage'].includes(k)) },
   { name: 'Owner (approver)', desc: 'Reviews & approves products, locations, adjustments, audits', role: 'admin', perms: () => ['approvals.manage', 'dashboard.view', 'products.view', 'locations.view', 'adjustments.view', 'audits.view', 'reports.inventory', 'reports.orders'] },
 ]
@@ -32,7 +32,7 @@ export default function UsersPage() {
         {users.data?.map((u) => (
           <tr key={u.id} className="hover:bg-slate-50">
             <td className="td"><p className="font-medium">{u.name}</p><p className="text-xs text-slate-500">{u.email}</p></td>
-            <td className="td">{u.role === 'super_admin' ? <Badge tone="indigo">Super admin</Badge> : <Badge>{u.role}</Badge>} {!u.active && <Badge tone="red">disabled</Badge>}</td>
+            <td className="td">{u.role === 'super_admin' ? <Badge tone="indigo">Super admin</Badge> : <Badge>{u.role}</Badge>} {u.simpleScreen && <Badge tone="green">simple screen</Badge>} {!u.active && <Badge tone="red">disabled</Badge>}</td>
             <td className="td text-sm text-slate-600">{u.role === 'super_admin' ? 'Full access' : u.permissions.length === 1 && u.permissions[0] === 'dashboard.view' ? 'Dashboard only' : `${u.permissions.length} permissions`}</td>
             <td className="td"><span className="inline-flex items-center gap-1 text-xs">{u.totpEnabled ? <><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />2FA</> : <><ShieldOff className="h-3.5 w-3.5 text-slate-400" />no 2FA</>}</span>{u.locked && <Badge tone="red"><Lock className="mr-1 h-3 w-3" />locked</Badge>}{u.mustChangePassword && <p className="text-xs text-amber-600">must change password</p>}</td>
             <td className="td text-xs text-slate-500">{fmtDate(u.lastLoginAt)}</td>
@@ -56,11 +56,12 @@ export default function UsersPage() {
 }
 
 function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms: PermDef[]; onClose: () => void; onCreated: (t: string, pw: string) => void }) {
+  const [simple, setSimple] = useState(user?.simpleScreen ?? false)
   const [name, setName] = useState(user?.name ?? ''), [email, setEmail] = useState(user?.email ?? ''), [role, setRole] = useState<Me['role']>(user?.role ?? 'user'), [active, setActive] = useState(user?.active ?? true)
   const [sel, setSel] = useState<Set<string>>(new Set(user?.role === 'super_admin' ? [] : user?.permissions ?? ['dashboard.view']))
   const modules = [...new Set(perms.map((p) => p.module))]
   const toggle = (k: string) => setSel((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
-  const save = useAction(() => user ? patch(`/users/${user.id}`, { name, role, active, permissions: [...sel] }) : post('/users', { name, email, role, permissions: [...sel] }),
+  const save = useAction(() => user ? patch(`/users/${user.id}`, { name, role, active, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }) : post('/users', { name, email, role, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }),
     { ok: user ? 'User updated' : undefined, invalidate: ['users'], onSuccess: (r) => { if (!user) onCreated(`User created: ${r.user.email}`, r.temporaryPassword); onClose() } })
   const isSuper = role === 'super_admin'
   return (
@@ -73,7 +74,8 @@ function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms: PermD
         </div>
         {user && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />Account active</label>}
         {isSuper ? <p className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800">Super admins always have every permission, including user management, backups and real client details.</p> : (<>
-          <div><p className="label">Quick presets</p><div className="flex flex-wrap gap-2">{PRESETS.map((p) => <button key={p.name} type="button" title={p.desc} className="btn-secondary" onClick={() => { setSel(new Set(p.perms(perms))); setRole(p.role) }}>{p.name}</button>)}<button type="button" className="btn-ghost" onClick={() => setSel(new Set())}>Clear</button></div></div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><input type="checkbox" className="mt-1 h-4 w-4" checked={simple} onChange={(e) => setSimple(e.target.checked)} /><span><b>Simple one-page screen</b> (recommended for warehouse staff)<br />No side menu. One page with big buttons for only what this person is allowed to do, plus product search. Turn off to give them the full app.</span></label>
+          <div><p className="label">Quick presets</p><div className="flex flex-wrap gap-2">{PRESETS.map((p) => <button key={p.name} type="button" title={p.desc} className="btn-secondary" onClick={() => { setSel(new Set(p.perms(perms))); setRole(p.role); setSimple(!!p.simple) }}>{p.name}</button>)}<button type="button" className="btn-ghost" onClick={() => setSel(new Set())}>Clear</button></div></div>
           <div className="grid gap-3 sm:grid-cols-2">
             {modules.map((m) => { const ps = perms.filter((p) => p.module === m); const all = ps.every((p) => sel.has(p.key)); return (
               <fieldset key={m} className="rounded-lg border border-slate-200 p-3"><legend className="flex items-center gap-2 px-1 text-sm font-semibold">{m}<button type="button" className="text-xs font-normal text-brand-600 hover:underline" onClick={() => setSel((s) => { const n = new Set(s); ps.forEach((p) => all ? n.delete(p.key) : n.add(p.key)); return n })}>{all ? 'none' : 'all'}</button></legend>

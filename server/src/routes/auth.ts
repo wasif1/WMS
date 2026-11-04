@@ -15,7 +15,7 @@ const LOCK_MS = 15 * 60_000
 const GENERIC = 'Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.'
 
 export const publicUser = (u: User) => ({
-  id: u.id, name: u.name, email: u.email, role: u.role, active: u.active,
+  id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen,
   permissions: effectivePerms(u), mustChangePassword: u.mustChangePassword,
   totpEnabled: !!u.totpSecret, mfaSetupRequired: config.requireMfa && !u.totpSecret,
   lastLoginAt: u.lastLoginAt, createdAt: u.createdAt, locked: !!u.lockedUntil && u.lockedUntil > Date.now(),

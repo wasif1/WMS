@@ -56,6 +56,12 @@ NODE_ENV=production npm start      # put it behind HTTPS (nginx/Caddy); cookies 
 * Restore: stop the server, run `npm --prefix server run restore -- <backup.db.enc> /path/new.db`, then point `WMS_DB_PATH` at it. The same `WMS_MASTER_KEY` is required.
 * **Which schedule is best?** With 3 copies kept, *daily* gives 3 days of history, *weekly* 3 weeks, *monthly* 3 months. For an operational WMS we recommend **daily** (loss ≤ 24 h) plus copying the files off-site; raise `WMS_BACKUP_KEEP` for longer history. Test a restore regularly.
 
+## Simple one-page screen (for warehouse staff)
+A super admin can switch **Simple one-page screen** on for any non-super-admin user (Users & access -> edit; the "Warehouse operator" preset turns it on). That person then gets one page with **no side menu**:
+* **Waiting for you** (goods to receive, transfers ready to send, orders to confirm, counts in progress), **Do a job** (big plain-word buttons for exactly what they may do), **Find a product** (search by name, colour, size, weight, details *or product code*; filter by warehouse or "in stock only"), **My requests** (answers from the owner, including the owner's reason when something is not approved), and **This week in numbers**.
+* Every button opens the **same forms as the full app**, so all rules (stock checks, owner approval, separation of duties) are unchanged; in this mode the forms use plain words and show numbered steps. A "Bigger text" switch, dark mode and a "How do I use this screen?" help window are always available; layout works on phones (large tap targets).
+* Buttons appear **only** when the user holds the matching permission, and the server enforces the same permissions again. Typing another address just returns to this page. Everyone else keeps the full app; the page's code is loaded only for operators.
+
 ## Error handling
 Every API error has one shape: `{ error: "<plain sentence>", code: "<stable id>", fields?: [{field, message}], requestId? }`.
 * **Validation** lists every problem in plain language ("Reason must be at least 3 characters.", "Products, line 2, Product must be a number") and tags the field.

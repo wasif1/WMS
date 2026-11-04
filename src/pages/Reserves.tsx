@@ -5,8 +5,9 @@ import { useAuth } from '@/auth/AuthContext'
 import ClientSelect, { clientLabel } from '@/components/ClientSelect'
 import LinesEditor, { emptyLine, toPayload, type LineDraft } from '@/components/LinesEditor'
 import { LinesTable, Who } from '@/components/OrderBits'
-import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table } from '@/components/ui'
+import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, SimpleSteps } from '@/components/ui'
 import { get, post } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import type { StockRow } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
@@ -33,14 +34,16 @@ export default function Reserves() {
   )
 }
 
-function NewReserve({ onClose }: { onClose: () => void }) {
+export function NewReserve({ onClose }: { onClose: () => void }) {
+  const simple = useSimple()
   const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
   const [locationId, setLocationId] = useState<number | ''>(''), [clientId, setClientId] = useState<number | ''>(''), [note, setNote] = useState(''), [lines, setLines] = useState<LineDraft[]>([emptyLine()])
   const stock = useQuery({ queryKey: ['stock', locationId], queryFn: () => get<StockRow[]>(`/stock?locationId=${locationId}`), enabled: !!locationId })
   const save = useAction(() => post('/reserves', { locationId, clientId: clientId || undefined, note, lines: toPayload(lines) }), { ok: 'Reserve order placed - confirmation emailed', invalidate: ['reserves', 'stock', 'dashboard'], onSuccess: onClose })
   return (
-    <Modal open onClose={onClose} title="New reserve order" wide>
+    <Modal open onClose={onClose} title={simple ? 'Keep stock for a customer' : 'New reserve order'} wide>
       <div className="space-y-4">
+        {simple && <SimpleSteps steps={['Choose the warehouse and (if you know it) the customer.', 'Choose each product and how many to keep aside.', 'Press Save. Nobody else can sell these goods now.']} />}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Location"><select className="input" value={locationId} onChange={(e) => setLocationId(Number(e.target.value) || '')}><option value="">Select…</option>{locs.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
           <Field label="Client (optional)"><ClientSelect value={clientId} onChange={setClientId} optional /></Field>
@@ -48,13 +51,13 @@ function NewReserve({ onClose }: { onClose: () => void }) {
         {locationId ? <LinesEditor lines={lines} onChange={setLines} products={prods} stock={stock.data ?? []} /> : <p className="text-sm text-slate-500">Choose a location to see available stock.</p>}
         <Field label="Note"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}Place reserve order</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{simple ? 'Save' : 'Place reserve order'}</button></div>
       </div>
     </Modal>
   )
 }
 
-function Process({ order, prods, onClose }: { order: any; prods: any[]; onClose: () => void }) {
+export function Process({ order, prods, onClose }: { order: any; prods: any[]; onClose: () => void }) {
   const { can } = useAuth(); const [comment, setComment] = useState(''); const [clientId, setClientId] = useState<number | ''>(order.clientId ?? '')
   const [actual, setActual] = useState<Record<number, number>>(Object.fromEntries(order.lines.map((l: any) => [l.productId, l.qty])))
   const inv = ['reserves', 'outbound', 'stock', 'dashboard']

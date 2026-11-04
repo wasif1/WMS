@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast } from '@/components/ui'
+import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast, SimpleSteps } from '@/components/ui'
 import { post, put } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useLocations } from '@/lib/hooks'
 import type { Location } from '@/lib/types'
 
@@ -24,7 +25,8 @@ export default function Locations() {
   )
 }
 
-function LocForm({ loc, owner, onClose }: { loc?: Location; owner: boolean; onClose: () => void }) {
+export function LocForm({ loc, owner, onClose }: { loc?: Location; owner: boolean; onClose: () => void }) {
+  const simple = useSimple()
   const toast = useToast()
   const [name, setName] = useState(loc?.name ?? ''), [address, setAddress] = useState(loc?.address ?? ''), [active, setActive] = useState(loc?.active ?? true)
   const save = useAction(() => (loc ? put(`/locations/${loc.id}`, { name, address, active }) : post('/locations', { name, address, active })), {
@@ -32,14 +34,15 @@ function LocForm({ loc, owner, onClose }: { loc?: Location; owner: boolean; onCl
     onSuccess: (r: Location) => { toast('ok', loc ? 'Saved' : r.status === 'pending' ? 'Request submitted - the location is published after the owner approves it' : 'Location added'); onClose() },
   })
   return (
-    <Modal open onClose={onClose} title={loc ? 'Edit location' : owner ? 'Add location' : 'Request new location'}>
+    <Modal open onClose={onClose} title={loc ? 'Edit location' : simple ? 'Add a new warehouse' : owner ? 'Add location' : 'Request new location'}>
       <div className="space-y-4">
+        {simple && <SimpleSteps steps={['Type the name of the warehouse or place.', 'Add the address if you know it.', 'Press the blue button. The owner will check it before it appears.']} />}
         <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
         <Field label="Address"><input className="input" value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />Active (inventory and reserve orders available)</label>
         {!loc && !owner && <p className="rounded-lg bg-indigo-50 p-3 text-xs text-indigo-800">Owner approval needed: the location is only published after the owner approves it.</p>}
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{loc ? 'Save' : owner ? 'Add location' : 'Submit request'}</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!name.trim() || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{loc ? 'Save' : owner ? 'Add location' : simple ? 'Send to the owner' : 'Submit request'}</button></div>
       </div>
     </Modal>
   )

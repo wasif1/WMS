@@ -11,8 +11,8 @@ import { idParam, parse, str } from '../validation.js'
 import { publicUser } from './auth.js'
 
 const perms = z.array(z.enum(ALL_KEYS as [string, ...string[]])).max(100)
-const createSchema = z.object({ name: str(100), email: z.string().trim().email().max(254), role: z.enum(['super_admin', 'admin', 'user']), permissions: perms }).strict()
-const updateSchema = z.object({ name: str(100), role: z.enum(['super_admin', 'admin', 'user']), permissions: perms, active: z.boolean() }).strict().partial()
+const createSchema = z.object({ name: str(100), email: z.string().trim().email().max(254), role: z.enum(['super_admin', 'admin', 'user']), permissions: perms, simpleScreen: z.boolean().optional() }).strict()
+const updateSchema = z.object({ name: str(100), role: z.enum(['super_admin', 'admin', 'user']), permissions: perms, active: z.boolean(), simpleScreen: z.boolean() }).strict().partial()
 
 const tempPassword = () => `${randomToken(9)}-${Math.floor(1000 + Math.random() * 9000)}`
 
@@ -30,7 +30,7 @@ export function userRoutes(ctx: Ctx) {
     if (ctx.db.users.byIdx('email_idx', blindIndex(b.email, 'email'))) throw new AppError(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
     const temp = tempPassword()
     const u = ctx.db.users.insert(
-      { name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions, passwordHash: await hashPassword(temp), active: true, mustChangePassword: true, failedLogins: 0, createdAt: nowIso() },
+      { name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions, simpleScreen: b.role !== 'super_admin' && !!b.simpleScreen, passwordHash: await hashPassword(temp), active: true, mustChangePassword: true, failedLogins: 0, createdAt: nowIso() },
       { email_idx: blindIndex(b.email, 'email') },
     ) as User
     ctx.audit.log(req.user!, 'user.create', { entity: 'user', entityId: u.id, detail: `${u.email} (${u.role})`, ip: ip(req) })
@@ -43,7 +43,7 @@ export function userRoutes(ctx: Ctx) {
     if (!u) throw notFound('User')
     const b = parse(updateSchema, req.body)
     const next = { ...u, ...b } as User
-    if (next.role === 'super_admin') next.permissions = []
+    if (next.role === 'super_admin') { next.permissions = []; next.simpleScreen = false } // owners always get the full app
     const losesSuper = u.role === 'super_admin' && u.active && (next.role !== 'super_admin' || !next.active)
     if (losesSuper && activeSupers() <= 1) throw bad("You can't remove or disable the last active super admin. Make someone else a super admin first.")
     ctx.db.users.update(id, next, idx(next))

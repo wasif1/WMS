@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Plus, Search } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast } from '@/components/ui'
+import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast, SimpleSteps } from '@/components/ui'
 import { post, put } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useProducts } from '@/lib/hooks'
 import { UOM_LABEL, variationOf } from '@/lib/catalog'
 import type { Product } from '@/lib/types'
@@ -43,7 +44,8 @@ export default function Products() {
 
 const num = (v: string) => (v.trim() === '' ? undefined : Number(v))
 
-function ProductForm({ product, owner, onClose }: { product?: Product; owner: boolean; onClose: () => void }) {
+export function ProductForm({ product, owner, onClose }: { product?: Product; owner: boolean; onClose: () => void }) {
+  const simple = useSimple()
   const toast = useToast()
   const { register, handleSubmit, watch } = useForm<FormVals>({
     defaultValues: { name: product?.name ?? '', description: product?.description ?? '', color: product?.color ?? '', size: product?.size ?? '', weight: product?.weight ?? '', caseSize: product?.caseSize?.toString() ?? '', uom: product?.uom ?? 'unit', reorderLevel: product?.reorderLevel?.toString() ?? '' },
@@ -58,8 +60,9 @@ function ProductForm({ product, owner, onClose }: { product?: Product; owner: bo
     onSuccess: (r: Product) => { toast('ok', product ? 'Product updated' : r.status === 'pending' ? 'Submitted - the product appears after the owner approves it' : 'Product created'); onClose() },
   })
   return (
-    <Modal open onClose={onClose} title={product ? `Edit ${product.name ?? 'product'}` : owner ? 'Add new product' : 'Submit new product for approval'} wide>
+    <Modal open onClose={onClose} title={product ? `Edit ${product.name ?? 'product'}` : simple ? 'Add a new product' : owner ? 'Add new product' : 'Submit new product for approval'} wide>
       <form onSubmit={handleSubmit((v) => save.mutate(v))} className="grid gap-4 sm:grid-cols-2">
+        {simple && <div className="sm:col-span-2"><SimpleSteps steps={['Fill in only what you know. Nothing is compulsory.', 'Type how the product is counted (units, kg, metres or bundles).', 'Press the blue button. The owner will check it before it appears.']} /></div>}
         <p className="text-xs text-slate-500 sm:col-span-2">Nothing here is mandatory - fill in what applies to this product and measure it the way it is actually handled.{!product && !owner && ' The owner reviews it before it goes live.'}</p>
         <div className="sm:col-span-2"><Field label="Product name"><input className="input" {...register('name')} /></Field></div>
         <div className="sm:col-span-2"><Field label="Details"><textarea className="input" rows={2} {...register('description')} /></Field></div>
@@ -71,7 +74,7 @@ function ProductForm({ product, owner, onClose }: { product?: Product; owner: bo
         <Field label="Reorder level" hint={uom === 'unit' ? 'Optional' : `Optional, in ${uom}`}><input className="input" type="number" min={0} {...register('reorderLevel')} /></Field>
         {product && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />Active</label>}
         <div className="sm:col-span-2"><ErrorBox error={save.error} /></div>
-        <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={save.isPending}>{save.isPending && <Spinner />}{product ? 'Save' : owner ? 'Create product' : 'Submit for approval'}</button></div>
+        <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={save.isPending}>{save.isPending && <Spinner />}{product ? 'Save' : owner ? 'Create product' : simple ? 'Send to the owner' : 'Submit for approval'}</button></div>
       </form>
     </Modal>
   )

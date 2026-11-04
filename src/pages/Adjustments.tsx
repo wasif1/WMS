@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import ProductPicker from '@/components/ProductPicker'
-import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, useToast } from '@/components/ui'
+import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, useToast, SimpleSteps } from '@/components/ui'
 import { get, post } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import { productLabel } from '@/lib/catalog'
 import type { StockRow } from '@/lib/types'
@@ -28,7 +29,8 @@ export default function Adjustments() {
   )
 }
 
-function Form({ owner, onClose }: { owner: boolean; onClose: () => void }) {
+export function Form({ owner, onClose }: { owner: boolean; onClose: () => void }) {
+  const simple = useSimple()
   const toast = useToast()
   const { data: prods = [] } = useProducts(); const { data: locs = [] } = useLocations()
   const [productId, setProductId] = useState<number | ''>(''), [locationId, setLocationId] = useState<number | ''>(''), [newQty, setNewQty] = useState(''), [reason, setReason] = useState('')
@@ -40,8 +42,9 @@ function Form({ owner, onClose }: { owner: boolean; onClose: () => void }) {
   })
   const delta = newQty === '' ? null : Number(newQty) - (current?.onHand ?? 0)
   return (
-    <Modal open onClose={onClose} title={owner ? 'New inventory adjustment' : 'Request an inventory adjustment'}>
+    <Modal open onClose={onClose} title={simple ? 'Fix a stock number' : owner ? 'New inventory adjustment' : 'Request an inventory adjustment'}>
       <div className="space-y-4">
+        {simple && <SimpleSteps steps={['Type the product name and pick it from the list.', 'Choose the warehouse, then type the number you really counted.', 'Write why it was wrong. Press the blue button. The owner will say OK.']} />}
         <Field label="Product" hint="Search by product name - results show the variation (colour, size)"><ProductPicker products={prods} value={productId} onChange={setProductId} /></Field>
         <Field label="Location"><select className="input" value={locationId} onChange={(e) => setLocationId(Number(e.target.value) || '')}><option value="">Select…</option>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
         {productId && locationId && <p className="rounded-lg bg-slate-50 p-3 text-sm">System quantity: <b>{fmt(current?.onHand ?? 0)}</b> (reserved {fmt(current?.reserved ?? 0)})</p>}
@@ -50,7 +53,7 @@ function Form({ owner, onClose }: { owner: boolean; onClose: () => void }) {
         <Field label="Reason (required)"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. damaged in storage, miscount at receipt" /></Field>
         {!owner && <p className="rounded-lg bg-indigo-50 p-3 text-xs text-indigo-800">Owner approval needed: stock does not change until the owner approves this request.</p>}
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!productId || !locationId || newQty === '' || reason.trim().length < 3 || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{owner ? 'Apply adjustment' : 'Submit request'}</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!productId || !locationId || newQty === '' || reason.trim().length < 3 || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{owner ? 'Apply adjustment' : simple ? 'Send to the owner' : 'Submit request'}</button></div>
       </div>
     </Modal>
   )

@@ -9,9 +9,10 @@ import { OfflineBanner, ToastProvider, toastError } from './components/ui'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ApiError } from './lib/api'
 import './index.css'
-import { initTheme } from './lib/theme'
+import { initTextSize, initTheme } from './lib/theme'
 
 initTheme()
+initTextSize()
 
 // Any page that fails to LOAD data tells the user (once), instead of silently showing an empty list. Sign-outs are handled by the auth layer.
 const queryClient = new QueryClient({ queryCache: new QueryCache({ onError: (e) => { if (!(e instanceof ApiError && e.status === 401)) toastError(e) } }), defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 15_000 } } })

@@ -7,6 +7,8 @@ import Login from '@/pages/Login'
 import Account from '@/pages/Account'
 import NotFound from '@/pages/NotFound'
 
+// the operator page pulls in the order forms; load it only for operators so everyone else's first load stays small
+const SimpleApp = lazy(() => import('@/pages/simple/SimpleApp'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Products = lazy(() => import('@/pages/Products'))
 const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
@@ -43,6 +45,8 @@ export default function App() {
   if (loading) return <PageLoader />
   if (!user) return <Login />
   const gated = user.mustChangePassword || user.mfaSetupRequired
+  // warehouse staff: one simple page, no side menu (super admin switches this on per user)
+  if (user.simpleScreen) return <Suspense fallback={<PageLoader />}><SimpleApp gated={gated} /></Suspense>
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

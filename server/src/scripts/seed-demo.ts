@@ -12,9 +12,9 @@ if (db.products.count() > 0) { console.error('Database is not empty'); process.e
 const inv = new Inventory(db)
 const now = () => new Date().toISOString()
 const ctx = { db, mailer: null as any, audit: new Audit(db) } as any
-const mkUser = async (name: string, email: string, role: any, permissions: string[]) => {
+const mkUser = async (name: string, email: string, role: any, permissions: string[], simpleScreen = false) => {
   const pw = process.env.WMS_DEMO_PASSWORD ?? randomToken(9) + '-42'
-  const u = db.users.insert({ name, email, role, permissions, passwordHash: await hashPassword(pw), active: true, mustChangePassword: false, failedLogins: 0, createdAt: now() }, { email_idx: blindIndex(email, 'email') })
+  const u = db.users.insert({ name, email, role, permissions, simpleScreen, passwordHash: await hashPassword(pw), active: true, mustChangePassword: false, failedLogins: 0, createdAt: now() }, { email_idx: blindIndex(email, 'email') })
   console.log(`  ${role.padEnd(12)} ${email}  password: ${pw}`)
   return u
 }
@@ -22,7 +22,8 @@ console.log('Demo users:')
 const boss = await mkUser('Sara Admin', 'super@demo.test', 'super_admin', [])
 await mkUser('Olivia Owner', 'owner@demo.test', 'admin', ['approvals.manage', 'dashboard.view', 'products.view', 'products.create', 'products.edit', 'locations.view', 'locations.manage', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory', 'reports.orders', 'clients.view'])
 await mkUser('Dana Dashboard', 'dashboard@demo.test', 'user', ['dashboard.view'])
-await mkUser('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view', 'products.create', 'locations.manage', 'locations.view', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count'])
+await mkUser('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view', 'products.create', 'locations.manage', 'locations.view', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory'], true)
+await mkUser('Tara Team', 'team@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view', 'products.create', 'locations.manage', 'locations.view', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory'])
 await mkUser('Mia Manager', 'manager@demo.test', 'admin', ['dashboard.view', 'products.view', 'products.create', 'products.edit', 'inbound.view', 'inbound.approve', 'outbound.view', 'outbound.confirm', 'reports.inventory', 'reports.orders', 'clients.view', 'clients.reveal', 'locations.view', 'adjustments.view', 'audits.view'])
 
 // name, colour, size, weight, details, case pack (0 = loose/none), measured in

@@ -4,8 +4,9 @@ import { Check, FileUp, Plus, X } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import LinesEditor, { emptyLine, toPayload, type LineDraft } from '@/components/LinesEditor'
 import { LinesTable, Who } from '@/components/OrderBits'
-import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, useToast } from '@/components/ui'
+import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, useToast, SimpleSteps } from '@/components/ui'
 import { get, post } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import { fmt, fmtDate } from '@/lib/utils'
 
@@ -36,7 +37,8 @@ export default function Inbound() {
   )
 }
 
-function NewInbound({ onClose }: { onClose: () => void }) {
+export function NewInbound({ onClose }: { onClose: () => void }) {
+  const simple = useSimple()
   const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts(); const toast = useToast()
   const [locationId, setLocationId] = useState<number | ''>(''), [reference, setReference] = useState(''), [comments, setComments] = useState(''), [emails, setEmails] = useState('')
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]); const file = useRef<HTMLInputElement>(null)
@@ -48,24 +50,25 @@ function NewInbound({ onClose }: { onClose: () => void }) {
     setLines(out.length ? out : [emptyLine()]); toast(miss.length ? 'err' : 'ok', miss.length ? `Imported ${out.length} lines. Unknown SKUs: ${miss.slice(0, 5).join(', ')}. Add new products first.` : `Imported ${out.length} lines`)
   }
   return (
-    <Modal open onClose={onClose} title="New inbound order (packing list)" wide>
+    <Modal open onClose={onClose} title={simple ? 'Receive stock' : 'New inbound order (packing list)'} wide>
       <div className="space-y-4">
+        {simple && <SimpleSteps steps={['Choose the warehouse where the goods arrived.', 'Choose each product and type how many you received.', 'Press the blue button. A manager will check it.']} />}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Receiving location"><select className="input" value={locationId} onChange={(e) => setLocationId(Number(e.target.value) || '')}><option value="">Select…</option>{locs.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
-          <Field label="Container / reference"><input className="input" value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
+          <Field label={simple ? 'Which warehouse did the goods arrive at?' : 'Receiving location'}><select className="input" value={locationId} onChange={(e) => setLocationId(Number(e.target.value) || '')}><option value="">Select…</option>{locs.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
+          <Field label={simple ? 'Delivery note number (if there is one)' : 'Container / reference'}><input className="input" value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
         </div>
-        <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Packing list</h3><div><input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} /><button className="btn-secondary" onClick={() => file.current?.click()}><FileUp className="h-4 w-4" />Import CSV (sku,cases,loose)</button></div></div>
+        <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">{simple ? 'What arrived?' : 'Packing list'}</h3>{!simple && <div><input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} /><button className="btn-secondary" onClick={() => file.current?.click()}><FileUp className="h-4 w-4" />Import CSV (sku,cases,loose)</button></div>}</div>
         <LinesEditor lines={lines} onChange={setLines} products={prods} checkStock={false} />
-        <Field label="Comments" hint="Mention if the complete packing list was received or if quantities changed"><textarea className="input" rows={2} value={comments} onChange={(e) => setComments(e.target.value)} /></Field>
-        <Field label="Email the record to (comma separated)"><input className="input" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="manager@company.com, finance@company.com" /></Field>
+        <Field label={simple ? 'Note (optional)' : 'Comments'} hint={simple ? 'Write a note if something is missing or different.' : 'Mention if the complete packing list was received or if quantities changed'}><textarea className="input" rows={2} value={comments} onChange={(e) => setComments(e.target.value)} /></Field>
+        <Field label={simple ? 'Send a copy by email (optional)' : 'Email the record to (comma separated)'}><input className="input" value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="manager@company.com, finance@company.com" /></Field>
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}Submit for approval</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{simple ? 'Send for checking' : 'Submit for approval'}</button></div>
       </div>
     </Modal>
   )
 }
 
-function Review({ order, loc, onClose }: { order: any; loc: string; onClose: () => void }) {
+export function Review({ order, loc, onClose }: { order: any; loc: string; onClose: () => void }) {
   const { can } = useAuth(); const { data: prods = [] } = useProducts()
   const pending = order.status === 'pending' && can('inbound.approve')
   const [verified, setVerified] = useState<LineDraft[]>(order.lines.map((l: any) => ({ productId: l.productId, cases: l.cases, loose: l.loose })))

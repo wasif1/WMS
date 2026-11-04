@@ -5,8 +5,9 @@ import { useAuth } from '@/auth/AuthContext'
 import ClientSelect, { clientLabel } from '@/components/ClientSelect'
 import LinesEditor, { emptyLine, toPayload, type LineDraft } from '@/components/LinesEditor'
 import { LinesTable, Who } from '@/components/OrderBits'
-import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table } from '@/components/ui'
+import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, SimpleSteps } from '@/components/ui'
 import { get, post, put } from '@/lib/api'
+import { useSimple } from '@/lib/simple'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import type { StockRow } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
@@ -32,7 +33,8 @@ export default function Outbound() {
   )
 }
 
-function OrderForm({ order, onClose }: { order?: any; onClose: () => void }) {
+export function OrderForm({ order, onClose }: { order?: any; onClose: () => void }) {
+  const simple = useSimple()
   const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
   const [locationId, setLocationId] = useState<number | ''>(order?.locationId ?? ''), [clientId, setClientId] = useState<number | ''>(order?.clientId ?? ''), [note, setNote] = useState(order?.note ?? '')
   const [lines, setLines] = useState<LineDraft[]>(order ? order.lines.map((l: any) => ({ productId: l.productId, cases: l.cases, loose: l.loose })) : [emptyLine()])
@@ -43,8 +45,9 @@ function OrderForm({ order, onClose }: { order?: any; onClose: () => void }) {
   }, enabled: !!locationId })
   const save = useAction(() => order ? put(`/outbound/${order.id}`, { clientId, note, lines: toPayload(lines) }) : post('/outbound', { locationId, clientId, note, lines: toPayload(lines) }), { ok: 'Outbound order saved - please review and confirm', invalidate: ['outbound', 'stock', 'dashboard'], onSuccess: onClose })
   return (
-    <Modal open onClose={onClose} title={order ? `Edit outbound #${order.id}` : 'New outbound order'} wide>
+    <Modal open onClose={onClose} title={order ? (simple ? `Change customer order #${order.id}` : `Edit outbound #${order.id}`) : simple ? 'Send out to a customer' : 'New outbound order'} wide>
       <div className="space-y-4">
+        {simple && <SimpleSteps steps={['Choose the warehouse the goods leave from, and the customer.', 'Choose each product and how many. Count the boxes before you save.', 'Press the blue button. Then press “Check & confirm” under “Waiting for you”.']} />}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Ship from"><select className="input" disabled={!!order} value={locationId} onChange={(e) => setLocationId(Number(e.target.value) || '')}><option value="">Select…</option>{locs.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
           <Field label="Customer"><ClientSelect value={clientId} onChange={setClientId} /></Field>
@@ -53,13 +56,13 @@ function OrderForm({ order, onClose }: { order?: any; onClose: () => void }) {
         <p className="text-xs text-slate-500">Verify the physical quantity before saving. Saving holds the stock; you confirm on the next screen.</p>
         <Field label="Note"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || !clientId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}Save order</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={!locationId || !clientId || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{simple ? 'Save, then check' : 'Save order'}</button></div>
       </div>
     </Modal>
   )
 }
 
-function Review({ order, prods, loc, onClose, onEdit }: { order: any; prods: any[]; loc?: string; onClose: () => void; onEdit: () => void }) {
+export function Review({ order, prods, loc, onClose, onEdit }: { order: any; prods: any[]; loc?: string; onClose: () => void; onEdit: () => void }) {
   const { can } = useAuth(); const inv = ['outbound', 'stock', 'dashboard', 'reserves']
   const confirm = useAction(() => post(`/outbound/${order.id}/confirm`), { ok: 'Outbound confirmed - inventory shipped', invalidate: inv, onSuccess: onClose })
   const cancel = useAction(() => post(`/outbound/${order.id}/cancel`), { ok: 'Order cancelled, stock released', invalidate: inv, onSuccess: onClose })

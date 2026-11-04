@@ -6,6 +6,8 @@ export interface User {
   email: string
   role: Role
   permissions: string[]
+  /** staff who see the simple one-page screen (no side menu) instead of the full app */
+  simpleScreen?: boolean
   passwordHash: string
   active: boolean
   mustChangePassword: boolean
