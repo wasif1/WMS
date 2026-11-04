@@ -20,7 +20,7 @@ export default function Outbound() {
       <PageHeader title="Outbound orders" subtitle="Save → review → confirm. Confirming removes the stock from the system." actions={can('outbound.create') && <button className="btn-primary" onClick={() => setForm('new')}><Plus className="h-4 w-4" />New outbound order</button>} />
       {can('outbound.view') && <>
         <div className="mb-4 flex flex-wrap gap-2">{['', 'saved', 'confirmed', 'cancelled'].map((s) => <button key={s} className={status === s ? 'btn-primary' : 'btn-secondary'} onClick={() => setStatus(s)}>{s || 'All'}</button>)}</div>
-        {q.isLoading ? <PageLoader /> : (
+        {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
           <Table head={['#', 'Location', 'Client', 'Units', 'Created by', 'Status', '']} empty={!q.data?.length && <Empty>No outbound orders.</Empty>}>
             {q.data?.map((o) => <tr key={o.id} className="hover:bg-slate-50"><td className="td font-medium">#{o.id}{o.sourceReserveId && <span className="ml-1 text-xs text-slate-400">(from R#{o.sourceReserveId})</span>}</td><td className="td">{locs.find((l) => l.id === o.locationId)?.name}</td><td className="td">{clientLabel(o.client)}</td><td className="td">{fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))}</td><td className="td"><p>{o.createdBy.name}</p><p className="text-xs text-slate-400">{fmtDate(o.createdBy.at)}</p></td><td className="td"><StatusBadge status={o.status} /></td><td className="td text-right"><button className="btn-ghost" onClick={() => setOpen(o)}>{o.status === 'saved' ? 'Review' : 'View'}</button></td></tr>)}
           </Table>

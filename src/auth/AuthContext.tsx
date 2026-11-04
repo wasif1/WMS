@@ -11,6 +11,9 @@ interface AuthState {
   loginMfa: (mfaToken: string, code: string) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
+  /** shown on the sign-in page after an automatic sign-out (e.g. session expired) */
+  notice: string | null
+  clearNotice: () => void
 }
 const Ctx = createContext<AuthState | null>(null)
 export const useAuth = () => { const c = useContext(Ctx); if (!c) throw new Error('AuthProvider missing'); return c }
@@ -18,6 +21,7 @@ export const useAuth = () => { const c = useContext(Ctx); if (!c) throw new Erro
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
+  const [notice, setNotice] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const clear = useCallback(() => { setUser(null); setCsrf(''); qc.clear() }, [qc])
@@ -26,19 +30,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     catch (e) { if (!(e instanceof ApiError)) throw e; clear() }
   }, [clear])
 
-  useEffect(() => { setUnauthorizedHandler(clear); refresh().finally(() => setLoading(false)) }, [clear, refresh])
+  useEffect(() => {
+    setUnauthorizedHandler((message, code) => { setNotice(code === 'account_disabled' ? message ?? 'Your account is not active.' : 'Your session has ended, so we signed you out to keep your data safe. Please sign in again - anything you were typing was not saved.'); clear() })
+    refresh().finally(() => setLoading(false))
+  }, [clear, refresh])
 
   const value = useMemo<AuthState>(() => ({
-    user, loading,
+    user, loading, notice, clearNotice: () => setNotice(null),
     can: (...perms) => !!user && (user.role === 'super_admin' || perms.some((p) => user.permissions.includes(p))),
     login: async (email, password) => {
       const r = await post('/auth/login', { email, password })
       if (r.mfaRequired) return { mfaToken: r.mfaToken as string }
-      setCsrf(r.csrf); setUser(r.user); return {}
+      setCsrf(r.csrf); setUser(r.user); setNotice(null); return {}
     },
     loginMfa: async (mfaToken, code) => { const r = await post('/auth/login/mfa', { mfaToken, code }); setCsrf(r.csrf); setUser(r.user) },
-    logout: async () => { try { await post('/auth/logout') } finally { clear() } },
+    logout: async () => { try { await post('/auth/logout') } catch { /* already signed out or offline - still sign out locally */ } finally { setNotice(null); clear() } },
     refresh,
-  }), [user, loading, clear, refresh])
+  }), [user, loading, notice, clear, refresh])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

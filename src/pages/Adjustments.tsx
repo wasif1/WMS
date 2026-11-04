@@ -17,7 +17,7 @@ export default function Adjustments() {
   return (
     <>
       <PageHeader title="Inventory adjustments" subtitle="Stock only changes after the owner approves an adjustment request." actions={can('adjustments.create') && <button className="btn-primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />{owner ? 'New adjustment' : 'Request adjustment'}</button>} />
-      {can('adjustments.view') && (q.isLoading ? <PageLoader /> : (
+      {can('adjustments.view') && (q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
         <Table head={['When', 'Product', 'Location', 'Before', 'Change', 'Reason', 'Requested by', 'Status']} empty={!q.data?.length && <Empty>No adjustments recorded.</Empty>}>
           {q.data?.map((a) => { const p = prods.find((x) => x.id === a.productId); return (
             <tr key={a.id}><td className="td whitespace-nowrap text-slate-600">{fmtDate(a.by.at)}</td><td className="td">{p ? productLabel(p) : a.productId}</td><td className="td">{locs.find((l) => l.id === a.locationId)?.name}</td><td className="td">{fmt(a.before)}</td><td className={`td font-semibold ${a.delta < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{a.delta > 0 ? '+' : ''}{fmt(a.delta)}</td><td className="td text-slate-600">{a.reason}{a.decisionComment && <p className="text-xs text-slate-400">Owner: {a.decisionComment}</p>}</td><td className="td">{a.by.name}</td><td className="td"><StatusBadge status={a.status ?? 'approved'} /></td></tr>) })}

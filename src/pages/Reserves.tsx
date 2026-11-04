@@ -21,7 +21,7 @@ export default function Reserves() {
       <PageHeader title="Reserved inventory" subtitle="Hold stock for future use. Reserved units are removed from available stock." actions={can('reserves.create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New reserve order</button>} />
       {can('reserves.view') && <>
         <div className="mb-4 flex flex-wrap gap-2">{['', 'active', 'converted', 'cancelled'].map((s) => <button key={s} className={status === s ? 'btn-primary' : 'btn-secondary'} onClick={() => setStatus(s)}>{s || 'All'}</button>)}</div>
-        {q.isLoading ? <PageLoader /> : (
+        {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
           <Table head={['#', 'Location', 'Client', 'Units', 'Reserved by', 'Status', '']} empty={!q.data?.length && <Empty>No reserve orders.</Empty>}>
             {q.data?.map((o) => <tr key={o.id} className="hover:bg-slate-50"><td className="td font-medium">#{o.id}</td><td className="td">{locs.find((l) => l.id === o.locationId)?.name}</td><td className="td">{clientLabel(o.client)}</td><td className="td">{fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))}</td><td className="td"><p>{o.createdBy.name}</p><p className="text-xs text-slate-400">{fmtDate(o.createdBy.at)}</p></td><td className="td"><StatusBadge status={o.status} /></td><td className="td text-right"><button className="btn-ghost" onClick={() => setOpen(o)}>{o.status === 'active' && can('reserves.convert') ? 'Process' : 'View'}</button></td></tr>)}
           </Table>

@@ -6,11 +6,11 @@ import ThemeToggle from '@/components/ThemeToggle'
 import { DEMO } from '@/lib/api'
 
 export default function Login() {
-  const { login, loginMfa } = useAuth()
+  const { login, loginMfa, notice, clearNotice } = useAuth()
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [code, setCode] = useState('')
   const [mfaToken, setMfaToken] = useState<string>(), [err, setErr] = useState<unknown>(), [busy, setBusy] = useState(false)
   const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setBusy(true); setErr(undefined)
+    e.preventDefault(); setBusy(true); setErr(undefined); clearNotice()
     try {
       if (mfaToken) await loginMfa(mfaToken, code.replace(/\s/g, ''))
       else { const r = await login(email, password); if (r.mfaToken) setMfaToken(r.mfaToken) }
@@ -27,6 +27,7 @@ export default function Login() {
           </>) : (
             <Field label="Authenticator code" hint="Enter the 6-digit code from your authenticator app"><input className="input text-center text-lg tracking-[0.4em]" inputMode="numeric" autoComplete="one-time-code" maxLength={7} required value={code} onChange={(e) => setCode(e.target.value)} autoFocus /></Field>
           )}
+          {notice && !err && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">{notice}</div>}
           <ErrorBox error={err} />
           <button className="btn-primary w-full" disabled={busy}>{busy && <Spinner />}{mfaToken ? 'Verify' : 'Sign in'}</button>
         </form>

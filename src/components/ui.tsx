@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, Info, Loader2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, WifiOff, X } from 'lucide-react'
+import { describeError, errorLine } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 export const Spinner = ({ className }: { className?: string }) => <Loader2 className={cn('h-4 w-4 animate-spin', className)} />
@@ -74,11 +75,54 @@ export function Kpi({ label, value, hint, icon, tone = 'indigo' }: { label: stri
   )
 }
 
-export const ErrorBox = ({ error }: { error?: unknown }) => error ? <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{(error as Error).message}</span></div> : null
+/** Inline, human-readable error. Pass anything thrown; shows what happened, what to do, each field problem, and a reference for server faults. */
+let inlineErrors = 0 // how many <ErrorBox>es are on screen; lets the toast layer avoid saying the same thing twice
+export function ErrorBox({ error, onRetry }: { error?: unknown; onRetry?: () => void }) {
+  const shown = !!error
+  useEffect(() => { if (!shown) return; inlineErrors++; return () => { inlineErrors-- } }, [shown])
+  if (!error) return null
+  const d = describeError(error)
+  const Icon = d.kind === 'network' ? WifiOff : AlertTriangle
+  return (
+    <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{d.title}</p>
+        {d.message && <p className="mt-0.5">{d.message}</p>}
+        {d.fields.length > 1 && <ul className="mt-1 list-disc space-y-0.5 pl-4">{d.fields.map((f, i) => <li key={i}>{f.message}.</li>)}</ul>}
+        {d.requestId && <p className="mt-1 text-xs opacity-80">Reference: <code className="select-all rounded bg-red-100 px-1">{d.requestId}</code></p>}
+        {(onRetry && d.retryable) && <button type="button" className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100" onClick={onRetry}><RefreshCw className="h-3.5 w-3.5" />Try again</button>}
+      </div>
+    </div>
+  )
+}
+
+/** Banner shown while the browser has no connection. */
+export function OfflineBanner() {
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+  useEffect(() => {
+    const up = () => setOnline(true), down = () => setOnline(false)
+    window.addEventListener('online', up); window.addEventListener('offline', down)
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down) }
+  }, [])
+  if (online) return null
+  return <div role="status" className="fixed inset-x-0 top-0 z-[70] flex items-center justify-center gap-2 bg-slate-900 px-4 py-2 text-sm text-white"><WifiOff className="h-4 w-4" />You're offline. Changes can't be saved until your connection is back.</div>
+}
 
 // ---- toasts ----
 interface Toast { id: number; kind: 'ok' | 'err' | 'info'; text: string }
 const ToastCtx = createContext<(kind: Toast['kind'], text: string) => void>(() => {})
+let emit: ((kind: Toast['kind'], text: string) => void) | null = null
+let lastErr = { text: '', at: 0 }
+/** Toast from outside React (e.g. the data-loading layer). Identical errors within 4s are shown once. */
+export const toastError = (e: unknown) => {
+  // wait a beat: if the page shows the error inline (with a Try again button) a toast would just repeat it
+  setTimeout(() => {
+    if (inlineErrors > 0) return
+    const text = errorLine(e); if (text === lastErr.text && Date.now() - lastErr.at < 4000) return
+    lastErr = { text, at: Date.now() }; emit?.('err', text)
+  }, 200)
+}
 export const useToast = () => useContext(ToastCtx)
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([])
@@ -86,6 +130,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const id = Date.now() + Math.random()
     setItems((s) => [...s.slice(-2), { id, kind, text }]); setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 4000)
   }, [])
+  useEffect(() => { emit = push; return () => { emit = null } }, [push])
   return (
     <ToastCtx.Provider value={push}>
       {children}
@@ -93,7 +138,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((t) => (
           <div key={t.id} className="pointer-events-auto flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg">
             {t.kind === 'ok' ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : t.kind === 'err' ? <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" /> : <Info className="h-4 w-4 shrink-0 text-blue-600" />}
-            <span>{t.text}</span>
+            <span className="min-w-0 break-words">{t.text}</span>
           </div>
         ))}
       </div>

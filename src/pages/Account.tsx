@@ -11,7 +11,7 @@ export default function Account() {
   const [cur, setCur] = useState(''), [nw, setNw] = useState(''), [nw2, setNw2] = useState('')
   const [setup, setSetup] = useState<{ secret: string; otpauthUrl: string }>(), [code, setCode] = useState(''), [dPw, setDPw] = useState('')
   const change = useAction(() => post('/auth/password', { currentPassword: cur, newPassword: nw }), { ok: 'Password changed. Other devices were signed out.', onSuccess: () => { setCur(''); setNw(''); setNw2(''); refresh() } })
-  const start = useAction(() => post('/auth/totp/setup'), { onSuccess: setSetup })
+  const start = useAction(() => post('/auth/totp/setup'), { onSuccess: setSetup, toastError: true })
   const enable = useAction(() => post('/auth/totp/enable', { code }), { ok: 'Two-factor authentication enabled', onSuccess: () => { setSetup(undefined); setCode(''); refresh() } })
   const disable = useAction(() => post('/auth/totp/disable', { password: dPw, code }), { ok: 'Two-factor disabled', onSuccess: () => { setCode(''); setDPw(''); refresh() } })
   return (

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import ErrorBoundary from './ErrorBoundary'
 import { useQuery } from '@tanstack/react-query'
 import { get } from '@/lib/api'
 import { Archive, ArrowLeftRight, BadgeCheck, BarChart3, Boxes, ClipboardCheck, DatabaseBackup, Download, EyeOff, FileText, LayoutDashboard, LogOut, Menu, PackageCheck, PackageMinus, ScrollText, Settings2, ShieldCheck, SlidersHorizontal, Users, Warehouse, type LucideIcon } from 'lucide-react'
@@ -38,6 +39,7 @@ const groups: { title: string; items: Item[] }[] = [
 export default function Layout() {
   const { user, can, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const loc = useLocation()
   const showApprovals = can('approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count')
   const pend = useQuery({ queryKey: ['approvals', 'pending'], queryFn: () => get<{ pending: number }>('/approvals?status=pending'), enabled: showApprovals, refetchInterval: 60_000 })
   const visible = (i: Item) => (i.superOnly ? user?.role === 'super_admin' : can(...i.perms))
@@ -80,7 +82,7 @@ export default function Layout() {
           <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />WMS</span><span className="ml-auto"><ThemeToggle /></span>
         </header>
         {DEMO && <div className="bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800">Demo mode: fake data in your browser only. Not the secure production backend.</div>}
-        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
+        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><ErrorBoundary key={loc.pathname} variant="page"><Outlet /></ErrorBoundary></main>
       </div>
     </div>
   )

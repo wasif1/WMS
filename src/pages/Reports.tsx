@@ -28,7 +28,7 @@ function Inventory() {
   return (<>
     <div className="mb-4 flex flex-wrap items-center gap-3"><select className="input max-w-xs" value={loc} onChange={(e) => setLoc(e.target.value)}><option value="">All warehouses</option>{locs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
       <button className="btn-secondary" onClick={() => downloadCsv(`/reports/inventory${qs ? qs + '&' : '?'}format=csv`, 'inventory-report.csv').catch((e) => toast('err', e.message))}><Download className="h-4 w-4" />Export CSV</button></div>
-    {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} /> : (
+    {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
       <Table head={['SKU', 'Product', 'Variation', 'Location', 'Case pack', 'On hand', 'Reserved', 'Available', 'Boxes']} empty={!q.data?.length && <Empty>No stock to report.</Empty>}>
         {q.data?.map((r, i) => <tr key={i}><td className="td font-mono text-xs">{r.SKU}</td><td className="td">{r.Product}</td><td className="td text-slate-600">{r.Variation || '-'}</td><td className="td">{r.Location}</td><td className="td">{r['Case pack']}</td><td className="td">{fmt(r['On hand'])}</td><td className="td">{fmt(r.Reserved)}</td><td className="td font-semibold">{fmt(r.Available)}</td><td className="td">{fmt(r.Boxes)}</td></tr>)}
       </Table>)}
@@ -49,7 +49,7 @@ function Orders() {
       <input className="input" type="date" value={f.from} onChange={(e) => set('from', e.target.value)} aria-label="From date" /><input className="input" type="date" value={f.to} onChange={(e) => set('to', e.target.value)} aria-label="To date" />
       <button className="btn-secondary" onClick={() => downloadCsv(`/reports/orders${qs}${qs.length > 1 ? '&' : ''}format=csv`, 'orders-report.csv').catch((e) => toast('err', e.message))}><Download className="h-4 w-4" />Export CSV</button>
     </div>
-    {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} /> : (
+    {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
       <Table head={['Type', '#', 'Date', 'Status', 'Location', 'Client', 'Lines', 'Units', 'By']} empty={!q.data?.length && <Empty>No orders match.</Empty>}>
         {q.data?.map((r, i) => <tr key={i}><td className="td capitalize">{r.Type}</td><td className="td">#{r.Number}</td><td className="td whitespace-nowrap text-slate-600">{fmtDate(r.Date)}</td><td className="td"><StatusBadge status={r.Status} /></td><td className="td">{r.Location}</td><td className="td">{r.Client || '-'}</td><td className="td">{r.Lines}</td><td className="td">{fmt(r.Units)}</td><td className="td">{r['Created by']}</td></tr>)}
       </Table>)}

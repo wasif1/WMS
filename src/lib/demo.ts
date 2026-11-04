@@ -9,7 +9,7 @@ import { ApiError } from './api'
 const KEY = 'wms-demo-db-v2', DEMO_PW = 'Demo-Passw0rd-2026'
 type A = any
 const now = () => new Date().toISOString()
-const err = (s: number, m: string, code?: string) => new ApiError(s, m, code)
+const err = (s: number, m: string, code?: string, fields?: { field: string; message: string }[]) => new ApiError(s, m, code, fields)
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 
 function seed(): A {
@@ -77,9 +77,9 @@ const log = (u: A, action: string, detail = '') => db.logs.push({ id: db.id('log
 const stockRow = (p: number, l: number) => { let s = db.stock.find((x: A) => x.productId === p && x.locationId === l); if (!s) { s = { productId: p, locationId: l, onHand: 0, reserved: 0 }; db.stock.push(s) } return s }
 function apply(p: number, l: number, d: { onHand?: number; reserved?: number }, m: { type: string; userId: number; refType?: string; refId?: number; note?: string }) {
   const s = stockRow(p, l); const onHand = r3(s.onHand + (d.onHand ?? 0)), reserved = r3(s.reserved + (d.reserved ?? 0))
-  if (onHand < 0) throw err(409, 'Insufficient stock on hand')
-  if (reserved < 0) throw err(409, 'Reserved quantity cannot be negative')
-  if (reserved > onHand) throw err(409, 'Insufficient available stock (reserved would exceed on hand)')
+  if (onHand < 0) throw err(409, `Not enough stock: ${plabel(db.products.find((x: A) => x.id === p))} has only ${s.onHand} on hand, but ${Math.abs(d.onHand ?? 0)} is needed.`, 'insufficient_stock')
+  if (reserved < 0) throw err(409, 'This would release more than is reserved. Refresh the page and try again.', 'stock_changed')
+  if (reserved > onHand) throw err(409, `Not enough available stock: ${plabel(db.products.find((x: A) => x.id === p))} has ${r3(s.onHand - s.reserved)} available right now (${s.reserved} of ${s.onHand} is already reserved).`, 'insufficient_stock')
   s.onHand = onHand; s.reserved = reserved
   db.movements.push({ id: db.id('m'), productId: p, locationId: l, type: m.type, onHandDelta: d.onHand ?? 0, reservedDelta: d.reserved ?? 0, onHandAfter: onHand, refType: m.refType, refId: m.refId, userId: m.userId, note: m.note, at: now() })
 }
@@ -111,7 +111,7 @@ const qs = (path: string) => Object.fromEntries(new URLSearchParams(path.split('
 type H = (u: A, b: A, m: RegExpMatchArray, q: Record<string, string>) => unknown
 const routes: [string, RegExp, string[] | 'super' | null, H][] = []
 const R = (method: string, re: string, perm: string[] | 'super' | null, h: H) => routes.push([method, new RegExp(`^${re}$`), perm, h])
-const find = (arr: A[], id: string, what: string) => { const x = arr.find((o) => o.id === Number(id)); if (!x) throw err(404, `${what} not found`); return x }
+const find = (arr: A[], id: string, what: string) => { const x = arr.find((o) => o.id === Number(id)); if (!x) throw err(404, `${what} could not be found. It may have been removed - refresh the page and try again.`, 'not_found'); return x }
 
 // ---- auth
 R('GET', '/auth/me', null, (u) => ({ user: pub(u), csrf: 'demo' }))
@@ -124,7 +124,7 @@ R('POST', '/auth/totp/disable', null, () => { throw err(400, 'Two-factor is disa
 R('GET', '/users/meta', 'super', () => ({ permissions: PERMISSIONS }))
 R('GET', '/users', 'super', () => db.users.map(pub))
 R('POST', '/users', 'super', (u, b) => {
-  if (db.users.some((x: A) => x.email.toLowerCase() === String(b.email).toLowerCase())) throw err(409, 'A user with this email already exists')
+  if (db.users.some((x: A) => x.email.toLowerCase() === String(b.email).toLowerCase())) throw err(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
   const temp = `Temp-${Math.random().toString(36).slice(2, 10)}-${Math.floor(1000 + Math.random() * 9000)}`
   const n = { id: db.id('u'), name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions ?? [], password: temp, active: true, mustChangePassword: true, createdAt: now() }
   db.users.push(n); log(u, 'user.create', n.email); return { user: pub(n), temporaryPassword: temp }
@@ -141,8 +141,8 @@ R('POST', '/users/(\\d+)/(unlock|reset-mfa)', 'super', () => ({ ok: true }))
 const viewAny = ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'reports.inventory', 'reports.orders', 'locations.view', 'locations.manage']
 R('GET', '/locations', viewAny, () => db.locations.filter(approved))
 R('POST', '/locations', ['locations.manage'], (u, b) => {
-  if (!b.name?.trim()) throw err(400, 'name: Required')
-  if (db.locations.some((l: A) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw err(409, 'Location name already exists')
+  if (!b.name?.trim()) throw err(400, 'Name is required.', 'validation', [{ field: 'name', message: 'Name is required' }])
+  if (db.locations.some((l: A) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw err(409, 'A location with this name already exists. Please use a different name.', 'duplicate', [{ field: 'name', message: 'This name is already used.' }])
   const l = { id: db.id('l'), name: b.name, address: b.address ?? '', active: b.active ?? true, ...submission(u) }; db.locations.push(l); log(u, l.status === 'approved' ? 'location.create' : 'location.request', l.name); return l
 })
 R('PUT', '/locations/(\\d+)', ['locations.manage'], (u, b, m) => { const l = find(db.locations.filter(approved), m[1], 'Location'); Object.assign(l, { name: b.name, address: b.address ?? '', active: b.active }); log(u, 'location.update', l.name); return l })
@@ -165,7 +165,7 @@ R('GET', '/stock', ['dashboard.view', 'products.view', 'inbound.view', 'transfer
 R('GET', '/inbound', ['inbound.view'], (_u, _b, _m, q) => db.inbound.filter((o: A) => !q.status || o.status === q.status).slice().reverse())
 R('POST', '/inbound', ['inbound.create'], (u, b) => { const o = { id: db.id('i'), locationId: b.locationId, reference: b.reference ?? '', notifyEmails: b.notifyEmails ?? [], lines: build(b.lines), status: 'pending', comments: b.comments ? [{ by: u.name, at: now(), text: b.comments }] : [], enteredBy: actor(u) }; db.inbound.push(o); log(u, 'inbound.create', `#${o.id}`); return o })
 R('POST', '/inbound/(\\d+)/approve', ['inbound.approve'], (u, b, m) => {
-  const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `Order is already ${o.status}`)
+  const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed')
   if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw err(403, 'Segregation of duties: someone else must approve a packing list you entered')
   const verified = b.verified ? build(b.verified, true) : o.lines
   const differs = o.lines.some((l: A) => (verified.find((v: A) => v.productId === l.productId)?.qty ?? 0) !== l.qty)
@@ -174,11 +174,11 @@ R('POST', '/inbound/(\\d+)/approve', ['inbound.approve'], (u, b, m) => {
   Object.assign(o, { status: 'approved', verified, decidedBy: actor(u) }); if (b.comment) o.comments.push({ by: u.name, at: now(), text: b.comment })
   mail([...o.notifyEmails, u.email], `Inbound #${o.id} approved`); log(u, 'inbound.approve', `#${o.id}`); return o
 })
-R('POST', '/inbound/(\\d+)/reject', ['inbound.approve'], (u, b, m) => { const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `Order is already ${o.status}`); Object.assign(o, { status: 'rejected', decidedBy: actor(u) }); o.comments.push({ by: u.name, at: now(), text: b.comment }); return o })
+R('POST', '/inbound/(\\d+)/reject', ['inbound.approve'], (u, b, m) => { const o = find(db.inbound, m[1], 'Inbound order'); if (o.status !== 'pending') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); Object.assign(o, { status: 'rejected', decidedBy: actor(u) }); o.comments.push({ by: u.name, at: now(), text: b.comment }); return o })
 // ---- transfers
 R('GET', '/transfers', ['transfers.view'], (_u, _b, _m, q) => db.transfers.filter((o: A) => !q.status || o.status === q.status).slice().reverse())
 R('POST', '/transfers', ['transfers.create'], (u, b) => { if (b.fromLocationId === b.toLocationId) throw err(400, 'Source and destination must differ'); const o = { id: db.id('t'), fromLocationId: b.fromLocationId, toLocationId: b.toLocationId, note: b.note ?? '', lines: build(b.lines), status: 'draft', createdBy: actor(u) }; db.transfers.push(o); return o })
-R('POST', '/transfers/(\\d+)/submit', ['transfers.create'], (u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, `Order is already ${o.status}`); for (const l of o.lines) apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: u.id, refType: 'transfer', refId: o.id }); Object.assign(o, { status: 'in_transit', submittedBy: actor(u) }); return o })
+R('POST', '/transfers/(\\d+)/submit', ['transfers.create'], (u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); for (const l of o.lines) apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: u.id, refType: 'transfer', refId: o.id }); Object.assign(o, { status: 'in_transit', submittedBy: actor(u) }); return o })
 R('POST', '/transfers/(\\d+)/cancel', ['transfers.create'], (_u, _b, m) => { const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'draft') throw err(409, 'Only drafts can be cancelled'); o.status = 'cancelled'; return o })
 R('POST', '/transfers/(\\d+)/receive', ['transfers.receive'], (u, b, m) => {
   const o = find(db.transfers, m[1], 'Transfer order'); if (o.status !== 'in_transit') throw err(409, `Order is ${o.status}, not in transit`)
@@ -193,9 +193,9 @@ const release = (o: A, uid: number, refType: string) => { for (const l of o.line
 const allocate = (lines: A[], loc: number, uid: number, id: number) => { for (const l of lines) apply(l.productId, loc, { reserved: l.qty }, { type: 'reserve', userId: uid, refType: 'outbound', refId: id }) }
 R('GET', '/reserves', ['reserves.view'], (u, _b, _m, q) => db.reserves.filter((o: A) => !q.status || o.status === q.status).slice().reverse().map((o: A) => wc(u, o)))
 R('POST', '/reserves', ['reserves.create'], (u, b) => { const lines = build(b.lines); const o = { id: db.id('r'), locationId: b.locationId, clientId: b.clientId, note: b.note ?? '', lines, status: 'active', createdBy: actor(u) }; for (const l of lines) apply(l.productId, b.locationId, { reserved: l.qty }, { type: 'reserve', userId: u.id, refType: 'reserve', refId: o.id }); db.reserves.push(o); mail([u.email], `Reserve order #${o.id} placed`); return wc(u, o) })
-R('POST', '/reserves/(\\d+)/cancel', ['reserves.convert'], (u, _b, m) => { const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `Order is already ${o.status}`); release(o, u.id, 'reserve'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
+R('POST', '/reserves/(\\d+)/cancel', ['reserves.convert'], (u, _b, m) => { const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); release(o, u.id, 'reserve'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
 R('POST', '/reserves/(\\d+)/convert', ['reserves.convert', 'outbound.create'], (u, b, m) => {
-  const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `Order is already ${o.status}`)
+  const o = find(db.reserves, m[1], 'Reserve order'); if (o.status !== 'active') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed')
   if (!o.clientId) throw err(400, 'Attach a client to the reserve order before converting it to outbound')
   const actual = build(b.actual, true); const lines = o.lines.map((l: A) => { const a = actual.find((x: A) => x.productId === l.productId)?.qty ?? 0; return { ...l, actualQty: a, difference: l.qty - a } })
   const ship = actual.filter((a: A) => a.qty > 0); if (!ship.length) throw err(400, 'Nothing to ship - cancel the reserve order instead')
@@ -206,8 +206,8 @@ R('POST', '/reserves/(\\d+)/convert', ['reserves.convert', 'outbound.create'], (
 R('GET', '/outbound', ['outbound.view'], (u, _b, _m, q) => db.outbound.filter((o: A) => !q.status || o.status === q.status).slice().reverse().map((o: A) => wc(u, o)))
 R('POST', '/outbound', ['outbound.create'], (u, b) => { const lines = build(b.lines); const o = { id: db.id('o'), locationId: b.locationId, clientId: b.clientId, note: b.note ?? '', lines, status: 'saved', createdBy: actor(u) }; allocate(lines, b.locationId, u.id, o.id); db.outbound.push(o); return wc(u, o) })
 R('PUT', '/outbound/(\\d+)', ['outbound.create'], (u, b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, 'Only saved orders can be edited'); const lines = build(b.lines); release(o, u.id, 'outbound'); allocate(lines, o.locationId, u.id, o.id); Object.assign(o, { clientId: b.clientId, note: b.note ?? '', lines }); return wc(u, o) })
-R('POST', '/outbound/(\\d+)/confirm', ['outbound.confirm'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `Order is already ${o.status}`); for (const l of o.lines) apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: u.id, refType: 'outbound', refId: o.id }); Object.assign(o, { status: 'confirmed', confirmedBy: actor(u) }); mail([u.email], `Outbound #${o.id} confirmed`); return wc(u, o) })
-R('POST', '/outbound/(\\d+)/cancel', ['outbound.create'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `Order is already ${o.status}`); release(o, u.id, 'outbound'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
+R('POST', '/outbound/(\\d+)/confirm', ['outbound.confirm'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); for (const l of o.lines) apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: u.id, refType: 'outbound', refId: o.id }); Object.assign(o, { status: 'confirmed', confirmedBy: actor(u) }); mail([u.email], `Outbound #${o.id} confirmed`); return wc(u, o) })
+R('POST', '/outbound/(\\d+)/cancel', ['outbound.create'], (u, _b, m) => { const o = find(db.outbound, m[1], 'Outbound order'); if (o.status !== 'saved') throw err(409, `This order was already ${o.status}, possibly by someone else. Refresh the page to see the latest.`, 'already_processed'); release(o, u.id, 'outbound'); Object.assign(o, { status: 'cancelled', closedBy: actor(u) }); return wc(u, o) })
 // ---- adjustments / audits
 R('GET', '/adjustments', ['adjustments.view'], () => db.adjustments.map((a: A) => ({ ...a, status: a.status ?? 'approved' })).reverse())
 R('POST', '/adjustments', ['adjustments.create'], (u, b) => {
@@ -243,7 +243,7 @@ R('GET', '/approvals', ['approvals.manage', 'products.create', 'locations.manage
 })
 const decide = (approve: boolean): H => (u, b, m) => {
   const k = m[1]; const list = stores()[k]; if (!list) throw err(404, 'Request type not found')
-  const o = find(list, m[2], 'Request'); if (stOf(k, o) !== 'pending') throw err(409, 'This request is not awaiting approval')
+  const o = find(list, m[2], 'Request'); if (stOf(k, o) !== 'pending') throw err(409, 'This request has already been decided. Refresh the page to see the latest.', 'already_processed')
   if (!approve && !String(b.comment ?? '').trim()) throw err(400, 'comment: A reason is required')
   if (approve && k === 'adjustment') apply(o.productId, o.locationId, { onHand: o.delta }, { type: 'adjustment', userId: u.id, refType: 'adjustment', refId: o.id, note: o.reason })
   if (approve && k === 'audit') { const ch: A[] = []; for (const l of o.lines) { const d = r3(l.counted - l.system); if (d) { apply(l.productId, l.locationId, { onHand: d }, { type: 'audit', userId: u.id, refType: 'audit', refId: o.id }); ch.push({ productId: l.productId, locationId: l.locationId, system: l.system, counted: l.counted, delta: d }) } } o.changes = ch; mail([u.email], `Inventory audit "${o.name}" approved`) }
@@ -309,16 +309,16 @@ export async function demoHandle(method: string, fullPath: string, body: A): Pro
   const path = fullPath.split('?')[0], q = qs(fullPath)
   if (method === 'POST' && path === '/auth/login') {
     const u = db.users.find((x: A) => x.email.toLowerCase() === String(body.email).toLowerCase())
-    if (!u || !u.active || u.password !== body.password) throw err(401, 'Invalid email or password')
+    if (!u || !u.active || u.password !== body.password) throw err(401, 'Incorrect email or password. For security, an account is locked for 15 minutes after 5 wrong attempts.', 'invalid_credentials')
     sessionStorage.setItem('wms-demo-user', String(u.id)); u.lastLoginAt = now(); log(u, 'auth.login'); save(); return { user: pub(u), csrf: 'demo' }
   }
   for (const [m, re, perm, h] of routes) {
     const match = m === method ? path.match(re) : null; if (!match) continue
     const u = db.users.find((x: A) => x.id === curId() && x.active)
-    if (!u) throw err(401, 'Authentication required')
-    if (u.mustChangePassword && !['/auth/me', '/auth/password', '/auth/logout'].includes(path)) throw err(403, 'Password change required', 'password_change_required')
-    if (perm === 'super' ? u.role !== 'super_admin' : perm && !can(u, ...perm)) throw err(403, 'You do not have permission to do this')
+    if (!u) throw err(401, 'Please sign in to continue.', 'unauthenticated')
+    if (u.mustChangePassword && !['/auth/me', '/auth/password', '/auth/logout'].includes(path)) throw err(403, 'You must set a new password before you can continue.', 'password_change_required')
+    if (perm === 'super' ? u.role !== 'super_admin' : perm && !can(u, ...perm)) throw err(403, "You don't have permission to do this. Ask a super admin to grant you access.", perm === 'super' ? 'super_admin_only' : 'forbidden')
     const out = h(u, body ?? {}, match, q); save(); return JSON.parse(JSON.stringify(out ?? null))
   }
-  throw err(404, 'Not found')
+  throw err(404, "That page or action doesn't exist.", 'not_found')
 }

@@ -26,7 +26,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<Period>('month')
   const q = useQuery({ queryKey: ['dashboard', period], queryFn: () => get<Dash>(`/dashboard?period=${period}`), refetchInterval: 60_000, placeholderData: (p) => p })
   if (q.isLoading) return <PageLoader />
-  if (q.error) return <ErrorBox error={q.error} />
+  if (q.error && !q.data) return <ErrorBox error={q.error} onRetry={() => q.refetch()} />
   const d = q.data!, k = d.kpis
   const note = PERIODS.find((p) => p.id === period)!.note
   const axis = { fontSize: 12, fill: '#64748b' }

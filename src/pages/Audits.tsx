@@ -14,7 +14,7 @@ export default function Audits() {
   return (
     <>
       <PageHeader title="Inventory audits" subtitle="Count, then submit. The owner reviews the differences and approves before inventory is updated." actions={can('audits.create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />Start audit</button>} />
-      {can('audits.view') && (q.isLoading ? <PageLoader /> : (
+      {can('audits.view') && (q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
         <Table head={['Audit', 'Lines', 'Differences', 'Started by', 'Status', '']} empty={!q.data?.length && <Empty>No audits yet.</Empty>}>
           {q.data?.map((a) => <tr key={a.id} className="hover:bg-slate-50"><td className="td font-medium">{a.name}</td><td className="td">{a.lineCount}</td><td className="td">{a.diffCount ? <span className="font-semibold text-red-600">{a.diffCount}</span> : '-'}</td><td className="td"><p>{a.createdBy.name}</p><p className="text-xs text-slate-400">{fmtDate(a.createdBy.at)}</p></td><td className="td"><StatusBadge status={a.status} /></td><td className="td text-right"><button className="btn-ghost" onClick={() => setOpen(a.id)}>Open</button></td></tr>)}
         </Table>

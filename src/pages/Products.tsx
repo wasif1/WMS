@@ -12,7 +12,7 @@ import type { Product } from '@/lib/types'
 interface FormVals { name: string; description: string; color: string; size: string; weight: string; caseSize: string; uom: Product['uom']; reorderLevel: string }
 
 export default function Products() {
-  const { can } = useAuth(); const { data, isLoading } = useProducts()
+  const { can } = useAuth(); const { data, isLoading, error, refetch } = useProducts()
   const [q, setQ] = useState(''); const [edit, setEdit] = useState<Product | 'new' | null>(null)
   const owner = can('approvals.manage')
   const rows = (data ?? []).filter((p) => `${p.name ?? ''} ${p.color ?? ''} ${p.size ?? ''} ${p.weight ?? ''} ${p.sku}`.toLowerCase().includes(q.toLowerCase()))
@@ -20,7 +20,8 @@ export default function Products() {
     <>
       <PageHeader title="Products" subtitle="Only approved products appear here. SKUs are generated automatically." actions={can('products.create') && <button className="btn-primary" onClick={() => setEdit('new')}><Plus className="h-4 w-4" />{owner ? 'Add new product' : 'Submit new product'}</button>} />
       <div className="relative mb-4 max-w-sm"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input className="input pl-9" placeholder="Search name, colour, size…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-      {isLoading ? <PageLoader /> : (
+      <ErrorBox error={error} onRetry={() => refetch()} />
+      {isLoading ? <PageLoader /> : error ? null : (
         <Table head={['Product', 'Variation', 'Case Pack', 'Weight', 'SKU', 'Status', '']} empty={rows.length === 0 && <Empty>No approved products yet.</Empty>}>
           {rows.map((p) => (
             <tr key={p.id} className="hover:bg-slate-50">

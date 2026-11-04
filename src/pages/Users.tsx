@@ -20,9 +20,9 @@ export default function UsersPage() {
   const meta = useQuery({ queryKey: ['perm-meta'], queryFn: () => get<{ permissions: PermDef[] }>('/users/meta') })
   const [edit, setEdit] = useState<Me | 'new' | null>(null); const [secret, setSecret] = useState<{ title: string; pw: string }>()
   const toast = useToast()
-  const useUserAction = (path: (u: Me) => string, ok: string) => useAction((u: Me) => post(path(u)), { ok, invalidate: ['users'] })
+  const useUserAction = (path: (u: Me) => string, ok: string) => useAction((u: Me) => post(path(u)), { ok, invalidate: ['users'], toastError: true })
   const unlock = useUserAction((u) => `/users/${u.id}/unlock`, 'Account unlocked'), resetMfa = useUserAction((u) => `/users/${u.id}/reset-mfa`, 'Two-factor reset')
-  const reset = useAction((u: Me) => post(`/users/${u.id}/reset-password`).then((r) => ({ ...r, u })), { invalidate: ['users'], onSuccess: (r) => setSecret({ title: `New temporary password for ${r.u.name}`, pw: r.temporaryPassword }) })
+  const reset = useAction((u: Me) => post(`/users/${u.id}/reset-password`).then((r) => ({ ...r, u })), { invalidate: ['users'], toastError: true, onSuccess: (r) => setSecret({ title: `New temporary password for ${r.u.name}`, pw: r.temporaryPassword }) })
   if (users.isLoading || meta.isLoading) return <PageLoader />
   return (
     <>

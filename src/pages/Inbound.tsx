@@ -20,7 +20,7 @@ export default function Inbound() {
       <PageHeader title="Inbound orders" subtitle="Packing lists received at a warehouse. Stock is added when a second person approves." actions={can('inbound.create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New inbound order</button>} />
       {can('inbound.view') && <>
         <div className="mb-4 flex gap-2">{['', 'pending', 'approved', 'rejected'].map((s) => <button key={s} className={status === s ? 'btn-primary' : 'btn-secondary'} onClick={() => setStatus(s)}>{s || 'All'}</button>)}</div>
-        {q.isLoading ? <PageLoader /> : (
+        {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
           <Table head={['#', 'Location', 'Reference', 'Units', 'Entered by', 'Status', '']} empty={!q.data?.length && <Empty>No inbound orders.</Empty>}>
             {q.data?.map((o) => (
               <tr key={o.id} className="hover:bg-slate-50"><td className="td font-medium">#{o.id}</td><td className="td">{loc(o.locationId)}</td><td className="td text-slate-600">{o.reference || '-'}</td>

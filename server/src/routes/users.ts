@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { destroyUserSessions, requireSuper } from '../auth.js'
 import { blindIndex, hashPassword, randomToken } from '../crypto.js'
-import { bad, conflict, notFound } from '../errors.js'
+import { AppError, bad, notFound } from '../errors.js'
 import { ip, nowIso, wrap } from '../http.js'
 import type { User } from '../models.js'
 import { ALL_KEYS, PERMISSIONS } from '../permissions.js'
@@ -27,7 +27,7 @@ export function userRoutes(ctx: Ctx) {
 
   r.post('/', wrap(async (req, res) => {
     const b = parse(createSchema, req.body)
-    if (ctx.db.users.byIdx('email_idx', blindIndex(b.email, 'email'))) throw conflict('A user with this email already exists')
+    if (ctx.db.users.byIdx('email_idx', blindIndex(b.email, 'email'))) throw new AppError(409, 'A user with this email address already exists.', 'duplicate', [{ field: 'email', message: 'This email is already in use.' }])
     const temp = tempPassword()
     const u = ctx.db.users.insert(
       { name: b.name, email: b.email.toLowerCase(), role: b.role, permissions: b.role === 'super_admin' ? [] : b.permissions, passwordHash: await hashPassword(temp), active: true, mustChangePassword: true, failedLogins: 0, createdAt: nowIso() },
@@ -45,7 +45,7 @@ export function userRoutes(ctx: Ctx) {
     const next = { ...u, ...b } as User
     if (next.role === 'super_admin') next.permissions = []
     const losesSuper = u.role === 'super_admin' && u.active && (next.role !== 'super_admin' || !next.active)
-    if (losesSuper && activeSupers() <= 1) throw bad('There must be at least one active super admin')
+    if (losesSuper && activeSupers() <= 1) throw bad("You can't remove or disable the last active super admin. Make someone else a super admin first.")
     ctx.db.users.update(id, next, idx(next))
     if (b.active === false || b.role || b.permissions) destroyUserSessions(ctx, id) // force re-auth so new rights apply immediately
     ctx.audit.log(req.user!, 'user.update', { entity: 'user', entityId: id, detail: JSON.stringify({ ...b, permissions: b.permissions?.length }), ip: ip(req) })

@@ -7,14 +7,15 @@ import { useAction, useClients } from '@/lib/hooks'
 import type { Client } from '@/lib/types'
 
 export default function Clients() {
-  const { can } = useAuth(); const { data, isLoading } = useClients(); const [edit, setEdit] = useState<Client | 'new' | null>(null)
+  const { can } = useAuth(); const { data, isLoading, error, refetch } = useClients(); const [edit, setEdit] = useState<Client | 'new' | null>(null)
   const reveal = can('clients.reveal')
   return (
     <>
       <PageHeader title="Clients" subtitle={reveal ? 'You can see real client details.' : 'Client identities are anonymised. Real details are visible only to users a super admin has granted access.'}
         actions={can('clients.manage') && <button className="btn-primary" onClick={() => setEdit('new')}><Plus className="h-4 w-4" />Add client</button>} />
       <div className={`mb-4 flex items-center gap-2 rounded-lg border p-3 text-sm ${reveal ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-600'}`}>{reveal ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}{reveal ? 'Real client data is showing. Access to it is logged.' : 'Showing aliases only.'}</div>
-      {isLoading ? <PageLoader /> : (
+      <ErrorBox error={error} onRetry={() => refetch()} />
+      {isLoading ? <PageLoader /> : error ? null : (
         <Table head={['Alias', ...(reveal ? ['Name', 'Contact', 'Address'] : []), '']} empty={!data?.length && <Empty>No clients yet.</Empty>}>
           {data?.map((c) => <tr key={c.id} className="hover:bg-slate-50"><td className="td font-medium"><Badge tone="indigo">{c.alias}</Badge></td>{reveal && <><td className="td">{c.name}</td><td className="td text-slate-600">{c.contact || '-'}</td><td className="td text-slate-600">{c.address || '-'}</td></>}<td className="td text-right">{can('clients.manage') && reveal && <button className="btn-ghost" onClick={() => setEdit(c)}>Edit</button>}</td></tr>)}
         </Table>

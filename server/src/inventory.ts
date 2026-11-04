@@ -27,9 +27,10 @@ export class Inventory {
       const s = this.getStock(productId, locationId)
       const onHand = r3(s.onHand + (d.onHand ?? 0))
       const reserved = r3(s.reserved + (d.reserved ?? 0))
-      if (onHand < 0) throw conflict('Insufficient stock on hand')
-      if (reserved < 0) throw conflict('Reserved quantity cannot be negative')
-      if (reserved > onHand) throw conflict('Insufficient available stock (reserved would exceed on hand)')
+      const what = () => { const p = this.db.products.get(productId); const l = this.db.locations.get(locationId); return `${p ? productLabel(p) : 'This product'} at ${l?.name ?? 'this location'}` }
+      if (onHand < 0) throw conflict(`Not enough stock: ${what()} has only ${s.onHand} on hand, but ${Math.abs(d.onHand ?? 0)} is needed.`, 'insufficient_stock')
+      if (reserved < 0) throw conflict(`This would release more than is reserved for ${what()}. Refresh the page and try again.`, 'stock_changed')
+      if (reserved > onHand) throw conflict(`Not enough available stock: ${what()} has ${r3(s.onHand - s.reserved)} available right now (${s.reserved} of ${s.onHand} is already reserved).`, 'insufficient_stock')
       this.db.stock.update(s.id, { ...s, onHand, reserved }, { key_idx: stockKey(productId, locationId) })
       this.db.movements.insert(
         {
@@ -48,20 +49,20 @@ export class Inventory {
 
   /** Validates raw line input against products (units must be whole numbers) and computes quantities. */
   buildLines(input: { productId: number; cases?: number; loose?: number }[], allowZero = false): Line[] {
-    if (!input.length) throw bad('At least one line is required')
+    if (!input.length) throw bad('Add at least one product before saving.')
     const seen = new Set<number>()
     return input.map((l) => {
       const p = this.db.products.get(l.productId) as Product | undefined
-      if (!p) throw notFound(`Product ${l.productId}`)
-      if (!isApproved(p)) throw bad(`${productLabel(p)} is not approved yet`)
-      if (!p.active) throw bad(`${productLabel(p)} is inactive`)
-      if (seen.has(p.id)) throw bad(`Product ${p.sku} appears twice - merge the lines`)
+      if (!p) throw notFound('One of the products')
+      if (!isApproved(p)) throw bad(`${productLabel(p)} is still waiting for owner approval, so it cannot be used yet.`)
+      if (!p.active) throw bad(`${productLabel(p)} is inactive. Re-activate it on the Products page first.`)
+      if (seen.has(p.id)) throw bad(`${productLabel(p)} is listed twice. Combine those lines into one.`)
       seen.add(p.id)
       const cases = l.cases ?? 0, loose = l.loose ?? 0
-      if (cases > 0 && !p.caseSize) throw bad(`${productLabel(p)} has no case pack - enter loose quantity only`)
+      if (cases > 0 && !p.caseSize) throw bad(`${productLabel(p)} has no case pack, so enter the amount under "Loose units" instead of cases.`)
       const qty = r3(cases * (p.caseSize ?? 0) + loose)
-      if (qty < 0 || (qty === 0 && !allowZero)) throw bad(`Quantity for ${productLabel(p)} must be greater than zero`)
-      if ((p.uom === 'unit' || p.uom === 'bundle') && (!Number.isInteger(qty) || !Number.isInteger(cases))) throw bad(`${productLabel(p)} must be in whole numbers`)
+      if (qty < 0 || (qty === 0 && !allowZero)) throw bad(`Enter a quantity greater than zero for ${productLabel(p)}.`)
+      if ((p.uom === 'unit' || p.uom === 'bundle') && (!Number.isInteger(qty) || !Number.isInteger(cases))) throw bad(`${productLabel(p)} is counted in whole numbers - remove the decimals.`)
       return { productId: p.id, cases, loose, qty }
     })
   }

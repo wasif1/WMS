@@ -22,7 +22,7 @@ export default function ProductDetail() {
   const [loc, setLoc] = useState('')
   const q = useQuery({ queryKey: ['product-overview', id, loc], queryFn: () => get<Overview>(`/products/${id}/overview${loc ? `?locationId=${loc}` : ''}`), placeholderData: (prev) => prev })
   if (q.isLoading) return <PageLoader />
-  if (q.error) return <ErrorBox error={q.error} />
+  if (q.error && !q.data) return <><Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Products</Link><ErrorBox error={q.error} onRetry={() => q.refetch()} /></>
   const { product: p, totals: t, byLocation, movements } = q.data!
   return (
     <>

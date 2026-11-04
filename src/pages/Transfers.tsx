@@ -21,7 +21,7 @@ export default function Transfers() {
       <PageHeader title="Transfer orders" subtitle="Move inventory between locations. Stock stays 'in transit' until the receiver confirms." actions={can('transfers.create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New transfer</button>} />
       {can('transfers.view') && <>
         <div className="mb-4 flex flex-wrap gap-2">{['', 'draft', 'in_transit', 'received'].map((s) => <button key={s} className={status === s ? 'btn-primary' : 'btn-secondary'} onClick={() => setStatus(s)}>{s ? s.replace('_', ' ') : 'All'}</button>)}</div>
-        {q.isLoading ? <PageLoader /> : (
+        {q.isLoading ? <PageLoader /> : q.error ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : (
           <Table head={['#', 'Route', 'Units', 'Created by', 'Status', '']} empty={!q.data?.length && <Empty>No transfers.</Empty>}>
             {q.data?.map((o) => <tr key={o.id} className="hover:bg-slate-50"><td className="td font-medium">#{o.id}</td><td className="td"><span className="inline-flex items-center gap-1.5">{loc(o.fromLocationId)}<ArrowRight className="h-3.5 w-3.5 text-slate-400" />{loc(o.toLocationId)}</span></td><td className="td">{fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))}</td><td className="td"><p>{o.createdBy.name}</p><p className="text-xs text-slate-400">{fmtDate(o.createdBy.at)}</p></td><td className="td"><StatusBadge status={o.status} /></td>
               <td className="td text-right"><button className="btn-ghost" onClick={() => setOpen(o)}>{o.status === 'in_transit' && can('transfers.receive') ? 'Receive' : o.status === 'draft' && can('transfers.create') ? 'Submit' : 'View'}</button></td></tr>)}

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { hasPerm, requirePerm } from '../auth.js'
 import { blindIndex } from '../crypto.js'
-import { conflict, notFound, bad } from '../errors.js'
+import { AppError, forbidden, notFound } from '../errors.js'
 import { ip, nowIso, wrap } from '../http.js'
 import type { Actor, Client, Location, Product, User } from '../models.js'
 import { idParam, optStr, parse, str } from '../validation.js'
@@ -55,7 +55,7 @@ export function masterRoutes(ctx: Ctx) {
     wrap((_req, res) => res.json((ctx.db.locations.all() as Location[]).filter(isApproved))))
   r.post('/locations', requirePerm('locations.manage'), wrap((req, res) => {
     const b = parse(locSchema, req.body)
-    if ((ctx.db.locations.all() as Location[]).some((l) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw conflict('Location name already exists')
+    if ((ctx.db.locations.all() as Location[]).some((l) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw new AppError(409, 'A location with this name already exists. Please use a different name.', 'duplicate', [{ field: 'name', message: 'This name is already used.' }])
     const l = ctx.db.locations.insert({ ...b, createdAt: nowIso(), ...submission(req.user!) })
     ctx.audit.log(req.user!, l.status === 'approved' ? 'location.create' : 'location.request', { entity: 'location', entityId: l.id, detail: b.name, ip: ip(req) })
     res.status(201).json(l)
@@ -64,7 +64,7 @@ export function masterRoutes(ctx: Ctx) {
     const id = idParam(req); const l = ctx.db.locations.get(id) as Location | undefined
     if (!l || !isApproved(l)) throw notFound('Location')
     const b = parse(locSchema, req.body)
-    if ((ctx.db.locations.all() as Location[]).some((x) => x.id !== id && x.status !== 'rejected' && x.name.toLowerCase() === b.name.toLowerCase())) throw conflict('Location name already exists')
+    if ((ctx.db.locations.all() as Location[]).some((x) => x.id !== id && x.status !== 'rejected' && x.name.toLowerCase() === b.name.toLowerCase())) throw new AppError(409, 'A location with this name already exists. Please use a different name.', 'duplicate', [{ field: 'name', message: 'This name is already used.' }])
     const next = { ...l, ...b }
     ctx.db.locations.update(id, next)
     ctx.audit.log(req.user!, 'location.update', { entity: 'location', entityId: id, ip: ip(req) })
@@ -117,7 +117,7 @@ export function masterRoutes(ctx: Ctx) {
     const id = idParam(req); const c = ctx.db.clients.get(id) as Client | undefined
     if (!c) throw notFound('Client')
     // Editing real details requires the reveal right too, so a manager cannot read data via the edit form.
-    if (!hasPerm(req.user!, 'clients.reveal')) throw bad('Editing client details requires the "see real client details" permission')
+    if (!hasPerm(req.user!, 'clients.reveal')) throw forbidden('Editing client details needs the "see real client details" permission. Ask a super admin to grant it.')
     const next = { ...c, ...parse(clientSchema, req.body) }
     ctx.db.clients.update(id, next)
     ctx.audit.log(req.user!, 'client.update', { entity: 'client', entityId: id, ip: ip(req) })

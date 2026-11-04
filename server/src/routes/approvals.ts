@@ -63,11 +63,11 @@ export function approvalRoutes(ctx: Ctx, inv: Inventory) {
 
   const decide = (approve: boolean) => wrap((req: Request, res) => {
     const kind = req.params.kind as Kind
-    if (!KINDS.includes(kind)) throw notFound('Request type')
+    if (!KINDS.includes(kind)) throw notFound('That kind of request')
     const id = idParam(req)
     const o = store(kind).get(id) as any
     if (!o) throw notFound('Request')
-    if (statusOf(kind, o) !== 'pending') throw conflict('This request is not awaiting approval')
+    if (statusOf(kind, o) !== 'pending') throw conflict('This request has already been decided. Refresh the page to see the latest.', 'already_processed')
     const b = parse(z.object({ comment: approve ? optStr(1000) : z.string().trim().min(1, 'A reason is required').max(1000) }).strict(), req.body)
     const u = req.user!
     const decidedBy = actor(u)

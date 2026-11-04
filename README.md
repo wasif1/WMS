@@ -56,9 +56,18 @@ NODE_ENV=production npm start      # put it behind HTTPS (nginx/Caddy); cookies 
 * Restore: stop the server, run `npm --prefix server run restore -- <backup.db.enc> /path/new.db`, then point `WMS_DB_PATH` at it. The same `WMS_MASTER_KEY` is required.
 * **Which schedule is best?** With 3 copies kept, *daily* gives 3 days of history, *weekly* 3 weeks, *monthly* 3 months. For an operational WMS we recommend **daily** (loss ≤ 24 h) plus copying the files off-site; raise `WMS_BACKUP_KEEP` for longer history. Test a restore regularly.
 
+## Error handling
+Every API error has one shape: `{ error: "<plain sentence>", code: "<stable id>", fields?: [{field, message}], requestId? }`.
+* **Validation** lists every problem in plain language ("Reason must be at least 3 characters.", "Products, line 2, Product must be a number") and tags the field.
+* **Business rules** name the product, place and numbers ("Not enough available stock: Cotton T-Shirt - Black · L at Karachi Main has 6 available right now (4 of 10 is already reserved)").
+* **Auth**: wrong password (mentions the 5-attempt lockout without revealing if the account exists), expired session (the user is told why they were signed out), permission denied (says who to ask), rate limits (with `Retry-After`).
+* **Unexpected faults** show a generic message plus a **reference id** (also in the `X-Request-Id` header). Details stay in the server log under that id; stack traces, SQL and file paths never reach the browser.
+* **UI** (`src/lib/errors.ts`): one function maps any failure to a title + advice. Offline/timeouts ("Can't reach the server... Nothing was saved."), "Try again" buttons on pages that fail to load, a crash screen instead of a blank page, a "couldn't load this page" screen when a page's code can't download, an offline banner, a friendly "page not found", and no-access pages that say what to do.
+
 ## Tests
 * `server/tests/review.test.ts`: regression tests, one block per review comment (approvals, dashboard, product form/list/detail, movement history).
 * `server/tests/pentest.test.ts`: automated penetration tests. It auto-discovers every route and proves each is unauthenticated=401 / no-permission=403 / CSRF-protected, then attacks with SQL injection, XSS, CSV injection, mass assignment, privilege escalation, prototype pollution, oversized/malformed bodies, session fixation/replay/timeouts, brute force, race conditions (double-ship, double-approve) and checks hardening headers and encryption at rest.
+* `server/tests/errors.test.ts` + `src/**/*.test.*`: every error path returns a plain-language message with a stable code, never leaks internals, and renders correctly (inline box, toast, crash screen, offline banner, session-ended notice).
 * `npm audit`: production dependencies report 0 known vulnerabilities (one moderate, dev-only ESLint/minimatch advisory remains; it does not ship).
 
 `npm test` (frontend) · `npm --prefix server test` (API: auth, CSRF, permissions, encryption, stock flows, masking, backups) · `npm run lint` · `npm run typecheck`
