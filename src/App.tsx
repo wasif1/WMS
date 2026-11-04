@@ -1,11 +1,15 @@
 import { lazy, Suspense } from 'react'
+import { t } from '@/i18n'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import Layout from '@/components/Layout'
 import { PageLoader } from '@/components/ui'
 import Login from '@/pages/Login'
 import Account from '@/pages/Account'
+import NotFound from '@/pages/NotFound'
 
+// the operator page pulls in the order forms; load it only for operators so everyone else's first load stays small
+const SimpleApp = lazy(() => import('@/pages/simple/SimpleApp'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Products = lazy(() => import('@/pages/Products'))
 const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
@@ -21,11 +25,12 @@ const Clients = lazy(() => import('@/pages/Clients'))
 const UsersPage = lazy(() => import('@/pages/Users'))
 const Admin = lazy(() => import('@/pages/Admin'))
 const Logs = lazy(() => import('@/pages/Logs'))
+const Approvals = lazy(() => import('@/pages/Approvals'))
 
 function Guard({ perms, superOnly, children }: { perms?: string[]; superOnly?: boolean; children: React.ReactNode }) {
   const { can, user } = useAuth()
   const ok = superOnly ? user?.role === 'super_admin' : !perms || can(...perms)
-  return ok ? <>{children}</> : <div className="card mx-auto mt-16 max-w-md p-8 text-center"><h2 className="text-lg font-semibold">No access</h2><p className="mt-2 text-sm text-slate-500">You don't have permission to view this page. Ask a super admin if you need it.</p></div>
+  return ok ? <>{children}</> : <div className="card mx-auto mt-16 max-w-md p-8 text-center"><h2 className="text-lg font-semibold">{t("You don't have access to this page")}</h2><p className="mt-2 text-sm text-slate-500">{superOnly ? t("Only a super admin can open this page.") : t("Your account isn't set up to use this part of the system.")} {t("Ask a super admin to grant access if you need it.")}</p></div>
 }
 
 /** First page the user is allowed to see, so a "dashboard only" user (or anyone without it) lands somewhere sensible. */
@@ -41,12 +46,15 @@ export default function App() {
   if (loading) return <PageLoader />
   if (!user) return <Login />
   const gated = user.mustChangePassword || user.mfaSetupRequired
+  // warehouse staff: one simple page, no side menu (super admin switches this on per user)
+  if (user.simpleScreen) return <Suspense fallback={<PageLoader />}><SimpleApp gated={gated} /></Suspense>
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route element={<Layout />}>
           {gated ? <Route path="*" element={<Account />} /> : (<>
             <Route index element={<Home />} />
+            <Route path="approvals" element={<Guard perms={['approvals.manage', 'products.create', 'locations.manage', 'adjustments.create', 'audits.create', 'audits.count']}><Approvals /></Guard>} />
             <Route path="products" element={<Guard perms={['products.view']}><Products /></Guard>} />
             <Route path="products/:id" element={<Guard perms={['products.view']}><ProductDetail /></Guard>} />
             <Route path="locations" element={<Guard perms={['locations.view', 'locations.manage']}><Locations /></Guard>} />
@@ -62,7 +70,7 @@ export default function App() {
             <Route path="backups" element={<Guard superOnly><Admin /></Guard>} />
             <Route path="logs" element={<Guard perms={['logs.view']}><Logs /></Guard>} />
             <Route path="account" element={<Account />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </>)}
         </Route>
       </Routes>

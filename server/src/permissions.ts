@@ -23,13 +23,13 @@ export const PERMISSIONS: PermDef[] = [
   { key: 'adjustments.create', label: 'Make inventory adjustments', module: 'Adjustments', sensitive: true },
   { key: 'audits.view', label: 'View inventory audits', module: 'Audits' },
   { key: 'audits.create', label: 'Start inventory audits', module: 'Audits' },
-  { key: 'audits.count', label: 'Enter physical counts', module: 'Audits' },
-  { key: 'audits.confirm', label: 'Confirm audits (applies changes)', module: 'Audits', sensitive: true },
+  { key: 'audits.count', label: 'Enter physical counts & submit audits for approval', module: 'Audits' },
   { key: 'reports.inventory', label: 'Inventory reports', module: 'Reports' },
   { key: 'reports.orders', label: 'Order reports', module: 'Reports' },
   { key: 'clients.view', label: 'View clients (anonymised aliases)', module: 'Clients' },
   { key: 'clients.manage', label: 'Add / edit clients', module: 'Clients' },
   { key: 'clients.reveal', label: 'See REAL client names & details', module: 'Clients', sensitive: true },
+  { key: 'approvals.manage', label: 'OWNER: approve / reject products, locations, adjustments & audits', module: 'Approvals', sensitive: true },
   { key: 'logs.view', label: 'View activity log', module: 'Administration', sensitive: true },
 ]
 

@@ -5,7 +5,13 @@ React 18 + TypeScript + Vite frontend, Node (Express + TypeScript) API, SQLite s
 ## Features
 Products (auto-SKU with colour/weight variations, case packs) · Locations · **Inbound** (packing list → verify → second-person approval → email) · **Transfers** (draft → in transit → received, receiver logged) · **Reserved** orders (hold stock; convert to outbound with the actual-vs-reserved difference recorded) · **Outbound** (save → review/edit → confirm) · Adjustments · Inventory audits (differences in red, summary email) · Product pages with movement history · Inventory & order reports (CSV) · KPI dashboard · Activity log · Backups.
 
-**Access control:** a super admin grants each user an exact set of permissions (29 fine-grained rights plus presets). A user can have only `dashboard.view` and see nothing else. Changes apply immediately (the user's sessions are revoked).
+**Owner approval:** the team can *submit* new products, new locations, inventory adjustments and completed audits, but nothing goes live (no product in the list, no published location, no stock change) until the owner (anyone holding `approvals.manage`) reviews and approves it on the **Approvals** page. Owners' own submissions are approved immediately. Audits show the owner counted vs system differences before inventory is updated.
+
+**Dashboard:** order data (Inbound, Outbound, Reserved, Pending, Transfers, Completed) with weekly / monthly / yearly filters, top products *by orders*, and a "no sales in 30 days" insight.
+
+**Products:** no field is mandatory; one weight field; case pack optional; measured by units, kg, metres or bundles. Staff search products by name + variation (colour/size), never by SKU.
+
+**Access control:** a super admin grants each user an exact set of permissions (30 fine-grained rights plus presets). A user can have only `dashboard.view` and see nothing else. Changes apply immediately (the user's sessions are revoked).
 
 **Client privacy:** clients appear as *Client A, Client B…*. Real name/contact/address are only returned by the API to users holding `clients.reveal` (also applied to reports and CSV exports). Reveals are logged.
 
@@ -50,5 +56,24 @@ NODE_ENV=production npm start      # put it behind HTTPS (nginx/Caddy); cookies 
 * Restore: stop the server, run `npm --prefix server run restore -- <backup.db.enc> /path/new.db`, then point `WMS_DB_PATH` at it. The same `WMS_MASTER_KEY` is required.
 * **Which schedule is best?** With 3 copies kept, *daily* gives 3 days of history, *weekly* 3 weeks, *monthly* 3 months. For an operational WMS we recommend **daily** (loss ≤ 24 h) plus copying the files off-site; raise `WMS_BACKUP_KEEP` for longer history. Test a restore regularly.
 
+## Simple one-page screen (for warehouse staff)
+A super admin can switch **Simple one-page screen** on for any non-super-admin user (Users & access -> edit; the "Warehouse operator" preset turns it on). That person then gets one page with **no side menu**:
+* **Waiting for you** (goods to receive, transfers ready to send, orders to confirm, counts in progress), **Do a job** (big plain-word buttons for exactly what they may do), **Find a product** (search by name, colour, size, weight, details *or product code*; filter by warehouse or "in stock only"), **My requests** (answers from the owner, including the owner's reason when something is not approved), and **This week in numbers**.
+* Every button opens the **same forms as the full app**, so all rules (stock checks, owner approval, separation of duties) are unchanged; in this mode the forms use plain words and show numbered steps. A "Bigger text" switch, dark mode and a "How do I use this screen?" help window are always available; layout works on phones (large tap targets).
+* Buttons appear **only** when the user holds the matching permission, and the server enforces the same permissions again. Typing another address just returns to this page. Everyone else keeps the full app; the page's code is loaded only for operators.
+
+## Error handling
+Every API error has one shape: `{ error: "<plain sentence>", code: "<stable id>", fields?: [{field, message}], requestId? }`.
+* **Validation** lists every problem in plain language ("Reason must be at least 3 characters.", "Products, line 2, Product must be a number") and tags the field.
+* **Business rules** name the product, place and numbers ("Not enough available stock: Cotton T-Shirt - Black · L at Karachi Main has 6 available right now (4 of 10 is already reserved)").
+* **Auth**: wrong password (mentions the 5-attempt lockout without revealing if the account exists), expired session (the user is told why they were signed out), permission denied (says who to ask), rate limits (with `Retry-After`).
+* **Unexpected faults** show a generic message plus a **reference id** (also in the `X-Request-Id` header). Details stay in the server log under that id; stack traces, SQL and file paths never reach the browser.
+* **UI** (`src/lib/errors.ts`): one function maps any failure to a title + advice. Offline/timeouts ("Can't reach the server... Nothing was saved."), "Try again" buttons on pages that fail to load, a crash screen instead of a blank page, a "couldn't load this page" screen when a page's code can't download, an offline banner, a friendly "page not found", and no-access pages that say what to do.
+
 ## Tests
+* `server/tests/review.test.ts`: regression tests, one block per review comment (approvals, dashboard, product form/list/detail, movement history).
+* `server/tests/pentest.test.ts`: automated penetration tests. It auto-discovers every route and proves each is unauthenticated=401 / no-permission=403 / CSRF-protected, then attacks with SQL injection, XSS, CSV injection, mass assignment, privilege escalation, prototype pollution, oversized/malformed bodies, session fixation/replay/timeouts, brute force, race conditions (double-ship, double-approve) and checks hardening headers and encryption at rest.
+* `server/tests/errors.test.ts` + `src/**/*.test.*`: every error path returns a plain-language message with a stable code, never leaks internals, and renders correctly (inline box, toast, crash screen, offline banner, session-ended notice).
+* `npm audit`: production dependencies report 0 known vulnerabilities (one moderate, dev-only ESLint/minimatch advisory remains; it does not ship).
+
 `npm test` (frontend) · `npm --prefix server test` (API: auth, CSRF, permissions, encryption, stock flows, masking, backups) · `npm run lint` · `npm run typecheck`

@@ -1,9 +1,10 @@
 import type { NextFunction, Request, Response } from 'express'
+import { T, statusWord } from './i18n/index.js'
 import { config } from './config.js'
 import { blindIndex, randomToken, safeEqual } from './crypto.js'
 import type { Ctx } from './context.js'
 import type { Session, User } from './models.js'
-import { AppError, forbidden } from './errors.js'
+import { AppError, forbidden, unauthenticated } from './errors.js'
 import { ALL_KEYS } from './permissions.js'
 
 export const COOKIE = config.secureCookies ? '__Host-wms_sid' : 'wms_sid'
@@ -60,29 +61,29 @@ const GATE_OK = ['/api/auth/me', '/api/auth/logout', '/api/auth/password', '/api
 export const authenticate = (ctx: Ctx) => (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = parseCookies(req.headers.cookie)[COOKIE]
-    if (!token) throw new AppError(401, 'Authentication required')
+    if (!token) throw unauthenticated()
     const s = ctx.db.sessions.byIdx('token_idx', sidIdx(token))
     const now = Date.now()
     if (!s || now - s.createdAt > config.sessionMaxMs || now - s.lastSeen > config.sessionIdleMs) {
       if (s) ctx.db.sessions.delete(s.id)
       res.clearCookie(COOKIE, { path: '/' })
-      throw new AppError(401, 'Session expired')
+      throw unauthenticated(T("Your session has expired for security. Please sign in again."), 'session_expired')
     }
     const user = ctx.db.users.get(s.userId) as User | undefined
-    if (!user || !user.active) throw new AppError(401, 'Authentication required')
+    if (!user || !user.active) throw unauthenticated(T("Your account is not active. Please contact your administrator."), 'account_disabled')
 
     if (!SAFE.has(req.method)) {
       const origin = req.headers.origin
       const expected = config.allowedOrigin ?? `${req.protocol}://${req.get('host')}`
-      if (origin && origin !== expected) throw forbidden('Bad origin')
+      if (origin && origin !== expected) throw forbidden(T("This request came from an unexpected address and was blocked. Reload the page and try again."), 'bad_origin')
       const sent = String(req.headers['x-csrf-token'] ?? '')
-      if (!sent || !safeEqual(sent, s.csrf)) throw forbidden('Invalid CSRF token')
+      if (!sent || !safeEqual(sent, s.csrf)) throw forbidden(T("Your session is out of date. Please reload the page and try again."), 'csrf')
     }
     if (now - s.lastSeen > 60_000) ctx.db.sessions.update(s.id, { ...s, lastSeen: now }, { token_idx: sidIdx(token) })
 
     const gated = user.mustChangePassword || (config.requireMfa && !user.totpSecret)
     if (gated && !GATE_OK.includes(req.originalUrl.split('?')[0])) {
-      throw new AppError(403, user.mustChangePassword ? 'Password change required' : 'MFA setup required', user.mustChangePassword ? 'password_change_required' : 'mfa_setup_required')
+      throw new AppError(403, user.mustChangePassword ? T('You must set a new password before you can continue.') : T('Two-factor authentication must be set up before you can continue.'), user.mustChangePassword ? 'password_change_required' : 'mfa_setup_required')
     }
     req.user = user
     req.sessionId = s.id
@@ -96,9 +97,9 @@ export const authenticate = (ctx: Ctx) => (req: Request, res: Response, next: Ne
 /** Passes if the user holds ANY of the listed permissions (super admins always pass). */
 export const requirePerm = (...perms: string[]) => (req: Request, _res: Response, next: NextFunction) => {
   const u = req.user
-  if (!u) return next(new AppError(401, 'Authentication required'))
+  if (!u) return next(unauthenticated())
   if (u.role === 'super_admin' || perms.some((p) => u.permissions.includes(p))) return next()
-  next(forbidden('You do not have permission to do this'))
+  next(forbidden())
 }
 export const requireSuper = (req: Request, _res: Response, next: NextFunction) =>
-  req.user?.role === 'super_admin' ? next() : next(forbidden('Super admin only'))
+  req.user?.role === 'super_admin' ? next() : next(forbidden(T("Only a super admin can do this."), 'super_admin_only'))

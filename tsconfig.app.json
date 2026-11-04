@@ -8,5 +8,6 @@
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "baseUrl": ".", "paths": { "@/*": ["src/*"] }
   },
-  "include": ["src", "server/src/permissions.ts"]
+  "include": ["src", "server/src/permissions.ts"],
+  "exclude": ["src/i18n/coverage.test.ts"]
 }

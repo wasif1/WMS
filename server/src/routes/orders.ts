@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express'
+import { T, render, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { requirePerm } from '../auth.js'
@@ -7,17 +8,19 @@ import { ip, nowIso, wrap } from '../http.js'
 import type { Actor, Client, Comment, Line, Location, Product, User } from '../models.js'
 import { Inventory } from '../inventory.js'
 import { emails, idParam, lineInput, lines as linesSchema, optStr, parse } from '../validation.js'
-import { presentClient } from './masters.js'
+import { isOwner, presentClient, submission } from './masters.js'
+import { isApproved, productLabel } from '../catalog.js'
 
 const dateQ = z.object({ status: z.string().max(30).optional(), locationId: z.coerce.number().int().optional(), clientId: z.coerce.number().int().optional(), from: z.string().max(30).optional(), to: z.string().max(30).optional() })
 
 export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const r = Router()
   const actor = (u: User): Actor => ({ userId: u.id, name: u.name, at: nowIso() })
+  void isOwner
   const comment = (u: User, text: string): Comment[] => (text ? [{ by: u.name, at: nowIso(), text }] : [])
   const locName = (id?: number) => (ctx.db.locations.get(id ?? -1) as Location | undefined)?.name ?? `#${id}`
-  const sku = (id: number) => (ctx.db.products.get(id) as Product | undefined)?.sku ?? `#${id}`
-  const checkLoc = (id: number) => { const l = ctx.db.locations.get(id) as Location | undefined; if (!l) throw notFound('Location'); if (!l.active) throw bad(`Location ${l.name} is inactive`); return l }
+  const sku = (id: number) => { const p = ctx.db.products.get(id) as Product | undefined; return p ? productLabel(p) : `#${id}` }
+  const checkLoc = (id: number) => { const l = ctx.db.locations.get(id) as Location | undefined; if (!l || !isApproved(l)) throw notFound('Location'); if (!l.active) throw bad(T("Location {name} is inactive", { name: l.name })); return l }
   const checkClient = (id: number) => { if (!ctx.db.clients.get(id)) throw notFound('Client') }
   const inRange = (at: string, q: z.infer<typeof dateQ>) => (!q.from || at >= q.from) && (!q.to || at <= q.to + 'T23:59:59.999Z')
   const lineStr = (ls: Line[]) => ls.map((l) => `  - ${sku(l.productId)}: ${l.qty}`).join('\n')
@@ -53,13 +56,13 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/inbound/:id/approve', requirePerm('inbound.approve'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.inbound_orders.get(id) as any
     if (!o) throw notFound('Inbound order')
-    if (o.status !== 'pending') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'pending') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const u = req.user!
-    if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw forbidden('Segregation of duties: someone else must approve a packing list you entered')
+    if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw forbidden(T("You entered this packing list, so someone else must approve it (separation of duties)."), 'separation_of_duties')
     const b = parse(z.object({ verified: z.array(lineInput).optional(), comment: optStr(1000) }).strict(), req.body)
     const verified: Line[] = b.verified ? inv.buildLines(b.verified, true) : o.lines
     const differs = o.lines.some((l: Line) => (verified.find((v) => v.productId === l.productId)?.qty ?? 0) !== l.qty)
-    if (differs && !b.comment) throw bad('Verified quantities differ from the packing list - a comment is required')
+    if (differs && !b.comment) throw bad(T("The verified quantities differ from the packing list. Please add a comment explaining why."), 'validation', [{ field: 'comment', message: T("A comment is required when quantities differ.") }])
     ctx.db.tx(() => {
       for (const l of verified) if (l.qty > 0) inv.apply(l.productId, o.locationId, { onHand: l.qty }, { type: 'inbound', userId: u.id, refType: 'inbound', refId: id })
       ctx.db.inbound_orders.update(id, { ...o, status: 'approved', verified, decidedBy: actor(u), comments: [...o.comments, ...comment(u, b.comment)] })
@@ -72,7 +75,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/inbound/:id/reject', requirePerm('inbound.approve'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.inbound_orders.get(id) as any
     if (!o) throw notFound('Inbound order')
-    if (o.status !== 'pending') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'pending') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const b = parse(z.object({ comment: z.string().trim().min(1).max(1000) }).strict(), req.body)
     ctx.db.inbound_orders.update(id, { ...o, status: 'rejected', decidedBy: actor(req.user!), comments: [...o.comments, ...comment(req.user!, b.comment)] })
     ctx.audit.log(req.user!, 'inbound.reject', { entity: 'inbound', entityId: id, ip: ip(req) })
@@ -87,7 +90,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   }))
   r.post('/transfers', requirePerm('transfers.create'), wrap((req, res) => {
     const b = parse(transferSchema, req.body)
-    if (b.fromLocationId === b.toLocationId) throw bad('Source and destination must differ')
+    if (b.fromLocationId === b.toLocationId) throw bad(T("Choose two different locations - the source and destination can't be the same."), 'validation', [{ field: 'toLocationId', message: T("Pick a different destination.") }])
     checkLoc(b.fromLocationId); checkLoc(b.toLocationId)
     const o = ctx.db.transfer_orders.insert({ ...b, lines: inv.buildLines(b.lines), status: 'draft', createdBy: actor(req.user!) })
     ctx.audit.log(req.user!, 'transfer.create', { entity: 'transfer', entityId: o.id, ip: ip(req) })
@@ -96,7 +99,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/submit', requirePerm('transfers.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
-    if (o.status !== 'draft') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'draft') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => {
       for (const l of o.lines as Line[]) inv.apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: req.user!.id, refType: 'transfer', refId: id })
       ctx.db.transfer_orders.update(id, { ...o, status: 'in_transit', submittedBy: actor(req.user!) })
@@ -107,7 +110,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/cancel', requirePerm('transfers.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
-    if (o.status !== 'draft') throw conflict('Only drafts can be cancelled')
+    if (o.status !== 'draft') throw conflict(T("Only draft transfers can be cancelled. This one has already been sent."), 'already_processed')
     ctx.db.transfer_orders.update(id, { ...o, status: 'cancelled' })
     ctx.audit.log(req.user!, 'transfer.cancel', { entity: 'transfer', entityId: id })
     res.json(ctx.db.transfer_orders.get(id))
@@ -115,12 +118,12 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/receive', requirePerm('transfers.receive'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
-    if (o.status !== 'in_transit') throw conflict(`Order is ${o.status}, not in transit`)
+    if (o.status !== 'in_transit') throw conflict(T("This transfer is {status}, so it cannot be received. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const b = parse(z.object({ received: z.array(lineInput).optional(), comment: optStr(1000) }).strict(), req.body)
     const received: Line[] = b.received ? inv.buildLines(b.received, true) : o.lines
-    for (const rl of received) if (!o.lines.some((l: Line) => l.productId === rl.productId)) throw bad('Received line is not on the transfer')
+    for (const rl of received) if (!o.lines.some((l: Line) => l.productId === rl.productId)) throw bad(T("One of the received products is not part of this transfer."))
     const discrepancy = o.lines.map((l: Line) => ({ productId: l.productId, sent: l.qty, received: received.find((x) => x.productId === l.productId)?.qty ?? 0 })).filter((d: any) => d.sent !== d.received)
-    if (discrepancy.length && !b.comment) throw bad('Received quantities differ from what was sent - a comment is required')
+    if (discrepancy.length && !b.comment) throw bad(T("The received quantities differ from what was sent. Please add a comment explaining why."), 'validation', [{ field: 'comment', message: T("A comment is required when quantities differ.") }])
     ctx.db.tx(() => {
       for (const l of received) if (l.qty > 0) inv.apply(l.productId, o.toLocationId, { onHand: l.qty }, { type: 'transfer_in', userId: req.user!.id, refType: 'transfer', refId: id })
       ctx.db.transfer_orders.update(id, { ...o, status: 'received', receivedLines: received, discrepancy, receivedBy: { ...actor(req.user!), locationId: o.toLocationId, location: locName(o.toLocationId) }, receiveComment: b.comment })
@@ -155,7 +158,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/reserves/:id/cancel', requirePerm('reserves.convert'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.reserve_orders.get(id) as any
     if (!o) throw notFound('Reserve order')
-    if (o.status !== 'active') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'active') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => { release(o, req.user!.id, 'unreserve', 'reserve', id); ctx.db.reserve_orders.update(id, { ...o, status: 'cancelled', closedBy: actor(req.user!) }) })
     ctx.audit.log(req.user!, 'reserve.cancel', { entity: 'reserve', entityId: id, ip: ip(req) })
     res.json(withClient(req, ctx.db.reserve_orders.get(id)))
@@ -163,16 +166,16 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/reserves/:id/convert', requirePerm('reserves.convert', 'outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.reserve_orders.get(id) as any
     if (!o) throw notFound('Reserve order')
-    if (o.status !== 'active') throw conflict(`Order is already ${o.status}`)
-    if (!o.clientId) throw bad('Attach a client to the reserve order before converting it to outbound')
+    if (o.status !== 'active') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
+    if (!o.clientId) throw bad(T("Choose a client for this reserve order before moving it to outbound."), 'validation', [{ field: 'clientId', message: T("A client is required.") }])
     const b = parse(z.object({ actual: z.array(lineInput).min(1), comment: optStr(1000) }).strict(), req.body)
     const actual = inv.buildLines(b.actual, true)
-    for (const a of actual) if (!o.lines.some((l: Line) => l.productId === a.productId)) throw bad('Line is not on the reserve order')
+    for (const a of actual) if (!o.lines.some((l: Line) => l.productId === a.productId)) throw bad(T("One of the products is not part of this reserve order."))
     const lines = (o.lines as Line[]).map((l) => { const a = actual.find((x) => x.productId === l.productId); const aq = a?.qty ?? 0; return { ...l, actualQty: aq, difference: l.qty - aq } })
     const shipping = actual.filter((a) => a.qty > 0)
-    if (!shipping.length) throw bad('Nothing to ship - cancel the reserve order instead')
+    if (!shipping.length) throw bad(T("Every quantity is zero, so there is nothing to ship. Release the reservation instead."))
     const diff = lines.some((l) => l.difference !== 0)
-    if (diff && !b.comment) throw bad('Actual quantities differ from reserved - a comment is required')
+    if (diff && !b.comment) throw bad(T("The quantities leaving differ from what was reserved. Please add a comment explaining why."), 'validation', [{ field: 'comment', message: T("A comment is required when quantities differ.") }])
     const out = ctx.db.tx(() => {
       release(o, req.user!.id, 'unreserve', 'reserve', id)
       const ob = ctx.db.outbound_orders.insert({ locationId: o.locationId, clientId: o.clientId, note: b.comment, lines: shipping, status: 'saved', sourceReserveId: id, createdBy: actor(req.user!) })
@@ -204,7 +207,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.put('/outbound/:id', requirePerm('outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
-    if (o.status !== 'saved') throw conflict('Only saved orders can be edited')
+    if (o.status !== 'saved') throw conflict(T("Only saved orders can be edited. This one has already been confirmed or cancelled."), 'already_processed')
     const b = parse(outboundSchema.omit({ locationId: true }), req.body)
     checkClient(b.clientId)
     const lines = inv.buildLines(b.lines)
@@ -219,7 +222,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/outbound/:id/confirm', requirePerm('outbound.confirm'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
-    if (o.status !== 'saved') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'saved') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => {
       for (const l of o.lines as Line[]) inv.apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: req.user!.id, refType: 'outbound', refId: id })
       ctx.db.outbound_orders.update(id, { ...o, status: 'confirmed', confirmedBy: actor(req.user!) })
@@ -231,75 +234,70 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/outbound/:id/cancel', requirePerm('outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
-    if (o.status !== 'saved') throw conflict(`Order is already ${o.status}`)
+    if (o.status !== 'saved') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => { release(o, req.user!.id, 'unreserve', 'outbound', id); ctx.db.outbound_orders.update(id, { ...o, status: 'cancelled', closedBy: actor(req.user!) }) })
     ctx.audit.log(req.user!, 'outbound.cancel', { entity: 'outbound', entityId: id, ip: ip(req) })
     res.json(withClient(req, ctx.db.outbound_orders.get(id)))
   }))
 
   // ============================ ADJUSTMENTS ============================
-  r.get('/adjustments', requirePerm('adjustments.view'), wrap((_req, res) => res.json((ctx.db.adjustments.all() as any[]).reverse())))
+  // The team SUBMITS an adjustment request. Stock changes only when the owner approves it (see /approvals).
+  r.get('/adjustments', requirePerm('adjustments.view'), wrap((_req, res) => res.json((ctx.db.adjustments.all() as any[]).map((a) => ({ ...a, status: a.status ?? 'approved' })).reverse())))
   r.post('/adjustments', requirePerm('adjustments.create'), wrap((req, res) => {
     const b = parse(z.object({ productId: z.number().int().positive(), locationId: z.number().int().positive(), newQty: z.number().finite().nonnegative().max(1e9), reason: z.string().trim().min(3).max(500) }).strict(), req.body)
-    if (!ctx.db.products.get(b.productId)) throw notFound('Product'); checkLoc(b.locationId)
+    const prod = ctx.db.products.get(b.productId) as Product | undefined
+    if (!prod || !isApproved(prod)) throw notFound('Product'); checkLoc(b.locationId)
     const s = inv.getStock(b.productId, b.locationId)
     const delta = Math.round((b.newQty - s.onHand) * 1000) / 1000
-    if (delta === 0) throw bad('Quantity is unchanged')
+    if (delta === 0) throw bad(T("That is the same as the current stock, so there is nothing to adjust."), 'validation', [{ field: 'newQty', message: T("Enter a different quantity.") }])
+    if (b.newQty < s.reserved) throw conflict(T("Stock can't go below {reserved}, because that many units are already reserved here. Release the reservation first or enter {reserved} or more.", { reserved: s.reserved }), 'insufficient_stock')
+    const sub = submission(req.user!)
     const a = ctx.db.tx(() => {
-      inv.apply(b.productId, b.locationId, { onHand: delta }, { type: 'adjustment', userId: req.user!.id, note: b.reason })
-      return ctx.db.adjustments.insert({ ...b, before: s.onHand, delta, by: actor(req.user!) })
+      const row = ctx.db.adjustments.insert({ ...b, before: s.onHand, delta, by: sub.submittedBy, status: sub.status, decidedBy: sub.decidedBy })
+      // the owner's own adjustment is approved on the spot; everyone else's waits
+      if (sub.status === 'approved') inv.apply(b.productId, b.locationId, { onHand: delta }, { type: 'adjustment', userId: req.user!.id, refType: 'adjustment', refId: row.id, note: b.reason })
+      return row
     })
-    ctx.audit.log(req.user!, 'adjustment.create', { entity: 'adjustment', entityId: a.id, detail: `${sku(b.productId)} ${delta > 0 ? '+' : ''}${delta}`, ip: ip(req) })
+    ctx.audit.log(req.user!, a.status === 'approved' ? 'adjustment.create' : 'adjustment.request', { entity: 'adjustment', entityId: a.id, detail: `${sku(b.productId)} ${delta > 0 ? '+' : ''}${delta}`, ip: ip(req) })
     res.status(201).json(a)
   }))
 
   // ============================ AUDITS ============================
-  const auditEmails = () => ((ctx.db.settings.all() as any[]).find((s) => s.auditEmails)?.auditEmails as string[]) ?? []
-  r.get('/audits', requirePerm('audits.view'), wrap((_req, res) => res.json((ctx.db.audits.all() as any[]).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: a.lines.filter((l: any) => l.counted != null && l.counted !== l.system).length })))))
+  // counting -> (team submits) -> submitted -> (owner approves) -> approved   [or rejected]. Stock updates ONLY on approval.
+  const diffsOf = (a: any) => a.lines.filter((l: any) => l.counted != null && l.counted !== l.system)
+  r.get('/audits', requirePerm('audits.view'), wrap((_req, res) => res.json((ctx.db.audits.all() as any[]).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: diffsOf(a).length })))))
   r.get('/audits/:id', requirePerm('audits.view'), wrap((req, res) => { const a = ctx.db.audits.get(idParam(req)); if (!a) throw notFound('Audit'); res.json(a) }))
   r.post('/audits', requirePerm('audits.create'), wrap((req, res) => {
     const b = parse(z.object({ name: z.string().trim().max(100).optional(), locationId: z.number().int().positive().optional() }).strict(), req.body)
     if (b.locationId) checkLoc(b.locationId)
-    const locs = (ctx.db.locations.all() as Location[]).filter((l) => l.active && (!b.locationId || l.id === b.locationId))
-    const prods = (ctx.db.products.all() as Product[]).filter((p) => p.active)
+    const locs = (ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && l.active && (!b.locationId || l.id === b.locationId))
+    const prods = (ctx.db.products.all() as Product[]).filter((p) => isApproved(p) && p.active)
     const lines = locs.flatMap((l) => prods.map((p) => ({ productId: p.id, locationId: l.id, system: inv.getStock(p.id, l.id).onHand, counted: null as number | null })))
-    if (!lines.length) throw bad('Nothing to audit')
-    const a = ctx.db.audits.insert({ name: b.name || `Audit ${nowIso().slice(0, 10)}`, scope: b.locationId ?? null, lines, status: 'counting', createdBy: actor(req.user!) })
+    if (!lines.length) throw bad(T("There is nothing to audit yet. Add approved products and locations first."))
+    const a = ctx.db.audits.insert({ name: b.name || `${render(T('Audit'), (req as any).lang ?? 'en')} ${nowIso().slice(0, 10).replace(/-/g, '')}`, scope: b.locationId ?? null, lines, status: 'counting', createdBy: actor(req.user!) })
     ctx.audit.log(req.user!, 'audit.create', { entity: 'audit', entityId: a.id, ip: ip(req) })
     res.status(201).json(a)
   }))
   r.put('/audits/:id/counts', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
-    if (a.status !== 'counting') throw conflict('Audit is closed')
+    if (a.status !== 'counting') throw conflict(T("This audit has already been submitted, so the counts can no longer be changed."), 'already_processed')
     const b = parse(z.object({ counts: z.array(z.object({ productId: z.number().int(), locationId: z.number().int(), counted: z.number().finite().nonnegative().max(1e9).nullable() }).strict()).max(5000) }).strict(), req.body)
     for (const c of b.counts) {
       const l = a.lines.find((x: any) => x.productId === c.productId && x.locationId === c.locationId)
-      if (!l) throw bad('Count for a line that is not part of this audit')
+      if (!l) throw bad(T("One of the counted lines is not part of this audit. Reload the audit and try again."))
       l.counted = c.counted
     }
     ctx.db.audits.update(id, { ...a, countedBy: actor(req.user!) })
     res.json(ctx.db.audits.get(id))
   }))
-  r.post('/audits/:id/confirm', requirePerm('audits.confirm'), wrap((req, res) => {
+  r.post('/audits/:id/submit', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
-    if (a.status !== 'counting') throw conflict('Audit is closed')
-    if (a.lines.some((l: any) => l.counted == null)) throw bad('Enter a physical count for every line before confirming')
-    const u = req.user!
-    const changes = ctx.db.tx(() => {
-      const out: any[] = []
-      for (const l of a.lines) {
-        const s = inv.getStock(l.productId, l.locationId) // apply against live stock, record what the system held at audit time
-        const delta = Math.round((l.counted - s.onHand) * 1000) / 1000
-        if (delta !== 0) { inv.apply(l.productId, l.locationId, { onHand: delta }, { type: 'audit', userId: u.id, refType: 'audit', refId: id }); out.push({ productId: l.productId, locationId: l.locationId, system: l.system, counted: l.counted, delta }) }
-      }
-      ctx.db.audits.update(id, { ...a, status: 'confirmed', confirmedBy: actor(u), changes: out })
-      return out
-    })
-    ctx.audit.log(u, 'audit.confirm', { entity: 'audit', entityId: id, detail: `${changes.length} changes`, ip: ip(req) })
-    mail([...auditEmails(), u.email], `Inventory audit #${id} confirmed - ${changes.length} change(s)`,
-      `Audit "${a.name}" confirmed by ${u.name} (${nowIso()}).\n\n${changes.length ? changes.map((c) => `  - ${sku(c.productId)} @ ${locName(c.locationId)}: system ${c.system} -> counted ${c.counted} (${c.delta > 0 ? '+' : ''}${c.delta})`).join('\n') : 'No differences found.'}\n`)
+    if (a.status !== 'counting') throw conflict(T("This audit was already submitted."), 'already_processed')
+    if (a.lines.some((l: any) => l.counted == null)) throw bad(T("Enter a physical count for every line before submitting. Lines with no count are still empty."), 'validation')
+    ctx.db.audits.update(id, { ...a, status: 'submitted', submittedBy: actor(req.user!) })
+    ctx.audit.log(req.user!, 'audit.submit', { entity: 'audit', entityId: id, detail: `${diffsOf(a).length} differences`, ip: ip(req) })
     res.json(ctx.db.audits.get(id))
   }))
 

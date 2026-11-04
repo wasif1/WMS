@@ -12,26 +12,30 @@ if (db.products.count() > 0) { console.error('Database is not empty'); process.e
 const inv = new Inventory(db)
 const now = () => new Date().toISOString()
 const ctx = { db, mailer: null as any, audit: new Audit(db) } as any
-const mkUser = async (name: string, email: string, role: any, permissions: string[]) => {
+const mkUser = async (name: string, email: string, role: any, permissions: string[], simpleScreen = false) => {
   const pw = process.env.WMS_DEMO_PASSWORD ?? randomToken(9) + '-42'
-  const u = db.users.insert({ name, email, role, permissions, passwordHash: await hashPassword(pw), active: true, mustChangePassword: false, failedLogins: 0, createdAt: now() }, { email_idx: blindIndex(email, 'email') })
+  const u = db.users.insert({ name, email, role, permissions, simpleScreen, passwordHash: await hashPassword(pw), active: true, mustChangePassword: false, failedLogins: 0, createdAt: now() }, { email_idx: blindIndex(email, 'email') })
   console.log(`  ${role.padEnd(12)} ${email}  password: ${pw}`)
   return u
 }
 console.log('Demo users:')
 const boss = await mkUser('Sara Admin', 'super@demo.test', 'super_admin', [])
+await mkUser('Olivia Owner', 'owner@demo.test', 'admin', ['approvals.manage', 'dashboard.view', 'products.view', 'products.create', 'products.edit', 'locations.view', 'locations.manage', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory', 'reports.orders', 'clients.view'])
 await mkUser('Dana Dashboard', 'dashboard@demo.test', 'user', ['dashboard.view'])
-await mkUser('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view'])
-await mkUser('Mia Manager', 'manager@demo.test', 'admin', ['dashboard.view', 'products.view', 'products.create', 'products.edit', 'inbound.view', 'inbound.approve', 'outbound.view', 'outbound.confirm', 'reports.inventory', 'reports.orders', 'clients.view', 'clients.reveal'])
+await mkUser('Omar Operator', 'operator@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view', 'products.create', 'locations.manage', 'locations.view', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory'], true)
+await mkUser('Tara Team', 'team@demo.test', 'user', ['dashboard.view', 'products.view', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'transfers.receive', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'clients.view', 'products.create', 'locations.manage', 'locations.view', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'audits.count', 'reports.inventory'])
+await mkUser('Mia Manager', 'manager@demo.test', 'admin', ['dashboard.view', 'products.view', 'products.create', 'products.edit', 'inbound.view', 'inbound.approve', 'outbound.view', 'outbound.confirm', 'reports.inventory', 'reports.orders', 'clients.view', 'clients.reveal', 'locations.view', 'adjustments.view', 'audits.view'])
 
-const locs = ['Karachi Main', 'Lahore Hub', 'Dubai Port'].map((name) => db.locations.insert({ name, address: name + ' Industrial Area', active: true, createdAt: now() }))
-const specs: [string, string, string, string, number, number][] = [
-  ['Cotton T-Shirt', 'White', 'M', 'Plain cotton tee', 24, 0.2], ['Cotton T-Shirt', 'Black', 'L', 'Plain cotton tee', 24, 0.22], ['Basmati Rice', '', '5kg', 'Premium long grain', 4, 5],
-  ['Olive Oil', '', '1L', 'Extra virgin', 12, 1], ['Steel Bottle', 'Silver', '750ml', 'Insulated bottle', 20, 0.4], ['LED Bulb', 'Warm', '9W', 'Energy saver', 50, 0.08],
+// name, colour, size, weight, details, case pack (0 = loose/none), measured in
+const locs = ['Karachi Main', 'Lahore Hub', 'Dubai Port'].map((name) => db.locations.insert({ name, address: name + ' Industrial Area', active: true, createdAt: now(), status: 'approved' }))
+const specs: [string, string, string, string, string, number, string][] = [
+  ['Cotton T-Shirt', 'White', 'M', '', 'Plain cotton tee', 24, 'unit'], ['Cotton T-Shirt', 'Black', 'L', '', 'Plain cotton tee', 24, 'unit'], ['Basmati Rice', '', '', '5 kg', 'Premium long grain', 4, 'unit'],
+  ['Olive Oil', '', '', '1 L', 'Extra virgin', 12, 'unit'], ['Steel Wire Roll', 'Silver', '', '1.5 kg', 'Galvanised wire', 0, 'kg'], ['LED Bulb', 'Warm', '', '9 W', 'Energy saver', 50, 'unit'],
 ]
-const prods = specs.map(([name, color, weight, description, caseSize, unitWeightKg]) => {
-  const sku = skuFor(ctx, name, color || undefined, weight)
-  return db.products.insert({ sku, name, description, color: color || undefined, weight, unitWeightKg, boxWeightKg: 1.2, caseSize, uom: 'unit', reorderLevel: 100, active: true, createdAt: now() }, { sku_idx: blindIndex(sku, 'sku') })
+const stamp = { status: 'approved', submittedBy: { userId: boss.id, name: boss.name, at: now() }, decidedBy: { userId: boss.id, name: boss.name, at: now() } }
+const prods = specs.map(([name, color, size, weight, description, caseSize, uom]) => {
+  const sku = skuFor(ctx, { name, color: color || undefined, size: size || undefined, weight: weight || undefined })
+  return db.products.insert({ sku, name, description, color: color || undefined, size: size || undefined, weight: weight || undefined, caseSize: caseSize || undefined, uom, reorderLevel: 100, active: true, createdAt: now(), ...stamp }, { sku_idx: blindIndex(sku, 'sku') })
 })
 const clients = ['Acme Retail Ltd', 'Blue Star Traders', 'Harbor Foods'].map((name, i) => db.clients.insert({ name, contact: 'contact@example.test', address: 'Somewhere', alias: `Client ${'ABC'[i]}`, createdAt: now() }))
 db.settings.insert({ n: 3 }, { key_idx: blindIndex('counter', 'clientseq') })
