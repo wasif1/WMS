@@ -195,7 +195,7 @@ describe('1 Dashboard: order data, top products by orders, no-sale insight, peri
     expect((await get('month')).trend).toHaveLength(30)
     const y = await get('year'); expect(y.trend).toHaveLength(12); expect(y.trend[0].label).toMatch(/^\d{4}-\d{2}$/)
     expect(y.kpis.outbound).toBe(3)
-    expect([400, 500]).toContain((await owner.call('get', '/api/dashboard?period=decade')).status)
+    expect((await owner.call('get', '/api/dashboard?period=decade')).status).toBe(400)
   })
   it('old orders fall outside a shorter window', async () => {
     const { owner, db } = await busy()

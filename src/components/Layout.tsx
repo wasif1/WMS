@@ -47,7 +47,7 @@ export default function Layout() {
   const visible = (i: Item) => (i.superOnly ? user?.role === 'super_admin' : can(...i.perms))
   return (
     <div className="min-h-screen lg:flex">
-      <aside className={cn('fixed inset-y-0 start-0 z-40 flex w-64 flex-col border-e border-slate-200 bg-white transition-transform lg:static lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}>
+      <aside className={cn('fixed inset-y-0 start-0 z-40 flex w-64 flex-col border-e border-slate-200 bg-white transition-transform lg:static lg:translate-x-0 lg:rtl:translate-x-0', open ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full')}>
         <div className="flex h-16 items-center gap-2.5 border-b border-slate-100 px-5">
           <div className="rounded-lg bg-brand-600 p-1.5 text-white"><PackageCheck className="h-5 w-5" /></div>
           <div><p className="text-sm font-semibold leading-none">{t("WMS")}</p><p className="mt-1 text-[11px] text-slate-500">{t("Warehouse Management")}</p></div>
