@@ -16,6 +16,7 @@ import json
 import mimetypes
 import re
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -87,6 +88,58 @@ def start_job(fn) -> Job:
         JOBS.popitem(last=False)
     threading.Thread(target=run_job, args=(job,), daemon=True).start()
     return job
+
+
+LIB_EXT = {".png": "image", ".jpg": "image", ".mp4": "video", ".gif": "image"}
+LIB_ZIPS: dict[str, tuple[Path, float]] = {}   # download token -> (zip file, created)
+
+
+def library_items():
+    out = []
+    if OUTPUTS.is_dir():
+        for f in OUTPUTS.rglob("*"):
+            if f.is_file() and f.suffix.lower() in LIB_EXT:
+                st = f.stat()
+                rel = f.relative_to(OUTPUTS).as_posix()
+                out.append({"file": rel, "name": f.name, "folder": rel.rsplit("/", 1)[0] if "/" in rel else "",
+                            "kind": "video" if f.suffix.lower() == ".mp4" else "image", "ext": f.suffix.lower()[1:],
+                            "size": st.st_size, "mtime": int(st.st_mtime), "url": "/outputs/" + rel})
+    out.sort(key=lambda i: i["mtime"], reverse=True)
+    return out[:1000]
+
+
+def library_files(files):
+    """Resolve requested library paths safely (inside outputs/ only)."""
+    base = OUTPUTS.resolve()
+    if not isinstance(files, list) or not files:
+        raise SpecError("Select at least one file")
+    if len(files) > 2000:
+        raise SpecError("Too many files for one zip (max 2000)")
+    paths = []
+    for rel in files:
+        p = (base / str(rel)).resolve()
+        if base in p.parents and p.is_file() and p.suffix.lower() in LIB_EXT:
+            paths.append(p)
+    if not paths:
+        raise SpecError("Those files no longer exist")
+    return paths
+
+
+def make_library_zip(paths) -> str:
+    now = time.time()
+    for tok, (f, ts) in list(LIB_ZIPS.items()):   # drop stale temp zips
+        if now - ts > 900:
+            f.unlink(missing_ok=True)
+            LIB_ZIPS.pop(tok, None)
+    d = Path(tempfile.mkdtemp(prefix="msz_"))
+    zf = d / f"creatives-{time.strftime('%Y%m%d-%H%M%S')}.zip"
+    base = OUTPUTS.resolve()
+    with zipfile.ZipFile(zf, "w", zipfile.ZIP_STORED) as z:   # media is already compressed
+        for p in paths:
+            z.write(p, p.relative_to(base).as_posix())
+    tok = uuid.uuid4().hex
+    LIB_ZIPS[tok] = (zf, now)
+    return tok
 
 
 def _progress(job):
@@ -289,6 +342,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"name": name, "brand": brandmod.load(name), "exists": name in brandmod.list_brands()})
             if path == "/api/themes":
                 return self._json({"themes": generator.theme_cards(brandmod.load()), "options": generator.THEME_OPTIONS})
+            if path == "/api/library":
+                items = library_items()
+                return self._json({"items": items, "total_size": sum(i["size"] for i in items)})
+            m = re.fullmatch(r"/api/library/download/([0-9a-f]{32})", path)
+            if m:
+                ent = LIB_ZIPS.get(m[1])
+                if not ent or not ent[0].is_file():
+                    return self._err(404, "This download expired; press the button again")
+                return self._file(ent[0], download=True)
             if path == "/api/sample.csv":
                 return self._send(200, bulk.SAMPLE_CSV.encode(), "text/csv", {"Content-Disposition": 'attachment; filename="sample-bulk.csv"'})
             m = re.fullmatch(r"/api/jobs/([0-9a-f]+)/zip", path)
@@ -340,6 +402,19 @@ class Handler(BaseHTTPRequestHandler):
                 n = engine.normalize(self._json_body().get("spec"))
                 c = engine.Composer(n)
                 return self._json({"ok": True, "duration": round(c.total, 3)})
+            if path == "/api/library/zip":
+                b = self._json_body()
+                files = [i["file"] for i in library_items()] if b.get("all") else b.get("files")
+                paths = library_files(files)
+                tok = make_library_zip(paths)
+                return self._json({"url": f"/api/library/download/{tok}", "count": len(paths)})
+            if path == "/api/library/delete":
+                paths = library_files(self._json_body().get("files"))
+                for p in paths:
+                    p.unlink()
+                    if p.parent != OUTPUTS.resolve() and not any(p.parent.iterdir()):
+                        p.parent.rmdir()   # tidy empty bulk_* folders
+                return self._json({"deleted": len(paths)})
             if path == "/api/generate":
                 return self._json(do_generate(self._json_body()))
             if path == "/api/themes":

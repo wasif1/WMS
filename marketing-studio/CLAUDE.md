@@ -11,6 +11,9 @@ No API keys, no network. **Preferred workflow for a request like "make a 15s Diw
 4. Many variants/products? Write a CSV and run `python studio.py bulk data.csv -p square`.
    The user can open any saved project in the editor (`python studio.py serve`) to fine-tune.
 
+Everything exported lands in `outputs/` (bulk runs in `outputs/bulk_<time>/`); the app's Library tab lists it and zips it.
+To publish this tool as its own repo: `python make_repo.py <new-folder> [--github NAME]`.
+
 ## Script syntax (generator)
 One line (or blank-line-separated paragraph) = one scene; one long paragraph is split into scenes.
 `*word*` highlight · `Headline | subtitle` · `1. step` (numbered) · `"Quote" — Name` ·

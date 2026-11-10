@@ -220,6 +220,30 @@ class Api(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/bulk", {"csv": csv_text, "targets": []})[0], 400)
         self.assertEqual(self.req("POST", "/api/bulk", {"csv": csv_text, "mode": "template", "template": "../x", "targets": ["square"]})[0], 400)
 
+    def test_library_list_zip_delete_and_confinement(self):
+        import zipfile, io
+        d = engine.OUTPUTS / "bulk_libtest"; d.mkdir(parents=True, exist_ok=True)
+        (d / "a.png").write_bytes(b"x" * 10); (d / "b.mp4").write_bytes(b"y" * 20)
+        try:
+            items = self.req("GET", "/api/library")[1]["items"]
+            mine = [i for i in items if i["folder"] == "bulk_libtest"]
+            self.assertEqual(sorted(i["kind"] for i in mine), ["image", "video"])
+            s, r = self.req("POST", "/api/library/zip", {"files": [i["file"] for i in mine]})
+            self.assertEqual((s, r["count"]), (200, 2))
+            s, z = self.req("GET", r["url"], raw=True)
+            self.assertEqual(sorted(zipfile.ZipFile(io.BytesIO(z)).namelist()), ["bulk_libtest/a.png", "bulk_libtest/b.mp4"])
+            s, r = self.req("POST", "/api/library/zip", {"all": True}); self.assertEqual(s, 200)
+            # traversal / non-media / unknown tokens are rejected
+            self.assertEqual(self.req("POST", "/api/library/zip", {"files": ["../studio.py"]})[0], 400)
+            self.assertEqual(self.req("POST", "/api/library/zip", {"files": []})[0], 400)
+            self.assertEqual(self.req("POST", "/api/library/delete", {"files": ["../studio.py"]})[0], 400)
+            self.assertTrue((engine.ROOT / "studio.py").exists())
+            self.assertEqual(self.req("GET", "/api/library/download/" + "0" * 32, raw=True)[0], 404)
+            self.assertEqual(self.req("POST", "/api/library/delete", {"files": ["bulk_libtest/a.png", "bulk_libtest/b.mp4"]})[1]["deleted"], 2)
+            self.assertFalse(d.exists())  # emptied bulk folder removed
+        finally:
+            import shutil; shutil.rmtree(d, ignore_errors=True)
+
     def test_render_quality_validation(self):
         spec = self.req("POST", "/api/generate", {"text": "Hi", "size": "square"})[1]["spec"]
         self.assertEqual(self.req("POST", "/api/render", {"spec": spec, "targets": ["square"], "format": "mp4", "quality": "insane"})[0], 400)

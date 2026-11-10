@@ -10,6 +10,7 @@ runs on your own computer: no accounts, no API keys, no uploads, no watermarks.
 | **Create** | Paste text → themed, animated video (MP4/GIF), single image post (PNG/JPG) or a carousel. Live preview, scene thumbnails, multi-size export in one click. |
 | **Brand & theme** | Your logo, 5 colours, fonts, default button text + website, and **your own theme** (animation style, transitions, decoration, text case…). Everything you create follows it. Keep one profile per client. |
 | **Bulk (CSV)** | One row = one creative. Generate from a script column, or fill a template with `{{placeholders}}`. Download everything as a .zip. |
+| **Library** | One button shows every generated video and image (filter, preview, select), **download everything or just your selection as one .zip**, or delete. |
 | **Advanced editor** | Full scene/layer control when you want to fine-tune (opens from "Fine-tune in editor"). |
 
 Professional touches built in: auto-fitted text, automatic readable contrast from your brand
@@ -31,7 +32,8 @@ Opens at http://127.0.0.1:8765 (this computer only).
 ## How to use (3 steps)
 1. **Brand & theme** (once): name, logo, colours, button text, website → *Save brand*.
 2. **Create**: paste your text, choose Video / Image post / Carousel, pick a style and sizes → *Export*.
-3. **Bulk** (optional): upload a CSV to make many at once.
+3. **Bulk** (optional): upload a CSV to make many at once. Tick *Also make a version in every theme* on Create for an instant A/B set.
+4. **Library**: find everything you made, download it all (or a selection) as one .zip.
 
 ### Writing your content
 One sentence, a paragraph, or a script with one line (or paragraph) per scene. Optional shortcuts:
@@ -89,8 +91,11 @@ Claude can also edit `brands/<name>.json` or write a CSV for bulk runs.
 5. Typewriter/counter animations · 6. Background removal for product shots (`rembg`) ·
 7. Single-file desktop build (PyInstaller) for non-technical teammates · 8. A/B variant generator (same script × themes) in one click.
 
-## Moving this into its own repository
+## Put this in its own new repository
+`make_repo.py` copies only the source (never your outputs, photos, brands or projects) into a fresh folder with a clean one-commit git history:
 ```bash
-git subtree split -P marketing-studio -b marketing-studio-only
-git remote add new git@github.com:<you>/<new-repo>.git && git push new marketing-studio-only:main
+python make_repo.py ~/projects/marketing-studio                          # local repo only
+python make_repo.py ~/projects/marketing-studio --github marketing-studio   # also creates a PRIVATE GitHub repo and pushes (needs `gh auth login`)
+python make_repo.py ~/projects/marketing-studio --github marketing-studio --public
+python make_repo.py ~/projects/marketing-studio --remote git@github.com:you/repo.git --push   # existing empty repo
 ```

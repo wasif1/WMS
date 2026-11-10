@@ -66,6 +66,16 @@ table{border-collapse:collapse;width:100%;font-size:12.5px}th,td{border-bottom:1
 .tag{display:inline-block;background:var(--soft);color:var(--acc);border-radius:6px;padding:1px 7px;font-size:12px;margin:0 4px 4px 0}
 .pv3{display:flex;gap:10px;flex-wrap:wrap}.pv3 img{height:300px;border-radius:10px;border:1px solid var(--line);background:#000}
 code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
+.badge{background:var(--acc);color:var(--acc-t);border-radius:10px;padding:0 7px;font-size:11px;margin-left:4px}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.item{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden;position:relative}
+.item.sel{border-color:var(--acc)}
+.item .th{height:170px;background:#0b0d12;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.item .th img,.item .th video{max-width:100%;max-height:100%}
+.item .ck{position:absolute;top:8px;left:8px;width:20px;height:20px;accent-color:var(--acc)}
+.item .inf{padding:7px 9px;font-size:12px}.item .inf b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .inf span{color:var(--mute)}
+.tb{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.tb .sp{flex:1}
 .tabpane{display:none}.tabpane.on{display:block}
 </style>
 </head>
@@ -76,6 +86,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
     <button data-tab="create" class="on">Create</button>
     <button data-tab="brand">Brand &amp; theme</button>
     <button data-tab="bulk">Bulk (CSV)</button>
+    <button data-tab="library">Library <span class="badge" id="libCount">0</span></button>
   </nav>
   <a class="link" href="/editor" id="advLink" title="Fine-tune every scene and layer">Advanced editor ↗</a>
 </div></header>
@@ -138,6 +149,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
     <div class="card" style="margin-top:12px">
       <div class="row" style="margin-top:0"><label>Format</label><div class="inl"><select id="fmt"></select>
         <select id="quality"><option value="standard">Standard</option><option value="hd" selected>HD (recommended)</option><option value="ultra">Ultra (large files)</option></select></div></div>
+      <label class="inl" style="margin:8px 0;gap:8px;font-size:13px"><input type="checkbox" id="allThemes"> Also make a version in every theme (A/B test)</label>
       <button class="btn pri big" id="exportBtn" disabled>Export</button>
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" style="flex:1" id="saveProj">Save project</button><button class="btn" style="flex:1" id="toEditor">Fine-tune in editor ↗</button></div>
       <div id="jobs"></div>
@@ -199,6 +211,27 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
     <p class="hint" style="margin:8px 0 0">Each row is rendered with your active brand and saved to <code>outputs/bulk_…</code> (also downloadable as one .zip). Rows that fail are skipped and listed so the rest still finish.<br><br>
     <b>Ideas:</b> a product list → one ad per product · a week of offers → a week of stories · the same script in 3 themes to A/B test · testimonials → quote cards.</p></div></div>
 </div></section>
+<!-- ============================ LIBRARY ============================ -->
+<section class="tabpane" id="tab-library">
+  <div class="card">
+    <div class="tb">
+      <h2 style="margin:0">All generated videos &amp; images</h2><span class="meta" id="libInfo"></span><span class="sp"></span>
+      <button class="btn" id="libBulk">+ Create in bulk</button>
+      <button class="btn pri" id="libAll">⬇ Download everything (.zip)</button>
+    </div>
+    <div class="tb">
+      <div class="chips" id="libKind"><button class="chip on" data-f="all">All</button><button class="chip" data-f="video">Videos</button><button class="chip" data-f="image">Images</button></div>
+      <select id="libFolder" style="width:auto"></select>
+      <span class="sp"></span>
+      <button class="btn sm" id="libSelAll">Select all shown</button>
+      <button class="btn sm" id="libSelNone">Clear</button>
+      <button class="btn sm pri" id="libZipSel" disabled>⬇ Download selected (.zip)</button>
+      <button class="btn sm" id="libDel" disabled style="color:var(--bad)">Delete selected</button>
+    </div>
+    <div class="err" id="libErr"></div>
+    <div class="lib" id="libGrid"></div>
+  </div>
+</section>
 </main>
 
 <script>
@@ -231,7 +264,7 @@ function showTab(t) {
   document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('on', p.id === 'tab-' + t));
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   history.replaceState(null, '', '#' + t);
-  if (t === 'brand') brandPreview(); if (t === 'bulk') loadTemplates();
+  if (t === 'brand') brandPreview(); if (t === 'bulk') loadTemplates(); if (t === 'library') loadLibrary();
 }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 document.querySelectorAll('[data-go]').forEach(a => a.onclick = e => { e.preventDefault(); showTab(a.dataset.go); });
@@ -297,7 +330,7 @@ async function upload(files) {
 $('#upl').onchange = async e => { await upload(e.target.files); e.target.value = ''; gen(); };
 
 // ---- generate + preview
-let genSeq = 0;
+let genSeq = 0, lastGenBody = null;
 const gen = debounce(async () => {
   const text = $('#text').value.trim(), mySeq = ++genSeq;
   store.set('ms_text', $('#text').value);
@@ -307,6 +340,7 @@ const gen = debounce(async () => {
     cta: $('#ctaOn').checked ? ($('#cta').value.trim() || null) : '', url: $('#ctaOn').checked ? ($('#url').value.trim() || null) : '',
     target: C.kind === 'video' ? (+$('#target').value || null) : null, music: C.kind === 'video' ? ($('#music').value || null) : null };
   try {
+    lastGenBody = body;
     const r = await post('/api/generate', body); if (mySeq !== genSeq) return;
     C.spec = r.spec; C.timeline = r.timeline; C.total = r.timeline.total; C.T = Math.min(C.T, C.total);
     const n = r.timeline.scenes.length;
@@ -363,6 +397,7 @@ function trackJob(id, host, label) {
     let j; try { j = await api('/api/jobs/' + id); } catch (e) { msg.textContent = e.message; return; }
     bar.style.width = j.progress * 100 + '%'; msg.textContent = `${j.status} ${Math.round(j.progress * 100)}%`;
     if (j.status === 'done') {
+      loadLibrary();
       box.replaceChildren(h('b', {}, `${label}: ${j.outputs.length} file${j.outputs.length > 1 ? 's' : ''} ready`), j.zip ? h('span', {}, '  ', h('a', { class: 'link', href: j.zip }, '⬇ Download all (.zip)')) : null,
         ...(j.warnings || []).map(w => h('div', { class: 'err' }, w)),
         ...j.outputs.slice(0, 12).map(o => h('div', {}, h('a', { class: 'link', href: o.url + '?download=1' }, '⬇ ' + o.file),
@@ -375,8 +410,18 @@ function trackJob(id, host, label) {
 }
 $('#exportBtn').onclick = async () => {
   const targets = [...C.sizes]; if (C.custom) targets.push(C.custom);
-  try { const j = await post('/api/render', { spec: C.spec, targets, format: $('#fmt').value, quality: $('#quality').value, scene: null }); trackJob(j.id, $('#jobs'), 'Export'); }
-  catch (e) { $('#genErr').textContent = e.message; }
+  const fmt = $('#fmt').value, quality = $('#quality').value;
+  try {
+    const j = await post('/api/render', { spec: C.spec, targets, format: fmt, quality, scene: null }); trackJob(j.id, $('#jobs'), 'Export');
+    if ($('#allThemes').checked) {   // A/B variants: same text, every theme, one job each (they run one after another)
+      const body = { ...lastGenBody };
+      for (const t of themes) {
+        if (t.id === (C.theme || ((info.brand.theme || {}).base || 'bold'))) continue;
+        const g = await post('/api/generate', { ...body, theme: t.id, name: `${C.spec.name}-${t.id}` });
+        const jj = await post('/api/render', { spec: g.spec, targets, format: fmt, quality, scene: null }); trackJob(jj.id, $('#jobs'), 'Variant: ' + t.name);
+      }
+    }
+  } catch (e) { $('#genErr').textContent = e.message; }
 };
 $('#saveProj').onclick = async () => {
   if (!C.spec) return; try { await put('/api/projects/' + C.spec.name, C.spec); $('#genErr').style.color = 'var(--ok)'; $('#genErr').textContent = `Saved as projects/${C.spec.name}.json`; setTimeout(() => { $('#genErr').style.color = ''; $('#genErr').textContent = ''; }, 3000); } catch (e) { $('#genErr').textContent = e.message; }
@@ -493,16 +538,56 @@ $('#bulkBtn').onclick = async () => {
     trackJob(j.id, $('#bJobs'), 'Bulk'); } catch (e) { $('#csvErr').textContent = e.message; }
 };
 
+// ================================================================ LIBRARY
+const L = { items: [], sel: new Set(), kind: 'all', folder: '' };
+const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+const shown = () => L.items.filter(i => (L.kind === 'all' || i.kind === L.kind) && (!L.folder || i.folder === (L.folder === '(root)' ? '' : L.folder)));
+async function loadLibrary() {
+  try { const r = await api('/api/library'); L.items = r.items; L.total = r.total_size; } catch (e) { $('#libErr').textContent = e.message; return; }
+  L.sel = new Set([...L.sel].filter(f => L.items.some(i => i.file === f)));
+  $('#libCount').textContent = L.items.length;
+  const folders = [...new Set(L.items.map(i => i.folder || '(root)'))];
+  $('#libFolder').replaceChildren(h('option', { value: '' }, 'All folders'), ...folders.map(f => h('option', { value: f, selected: f === L.folder }, f === '(root)' ? 'Single exports' : f)));
+  drawLibrary();
+}
+function drawLibrary() {
+  const items = shown(), g = $('#libGrid'); g.replaceChildren();
+  $('#libInfo').textContent = `${L.items.length} files · ${fmtSize(L.total || 0)}`;
+  if (!items.length) g.append(h('div', { class: 'meta', style: 'padding:30px' }, L.items.length ? 'Nothing matches this filter.' : 'Nothing here yet. Exports from Create and Bulk appear here automatically.'));
+  items.forEach(i => g.append(h('div', { class: 'item' + (L.sel.has(i.file) ? ' sel' : '') },
+    h('input', { type: 'checkbox', class: 'ck', checked: L.sel.has(i.file), onchange: e => { e.target.checked ? L.sel.add(i.file) : L.sel.delete(i.file); drawLibrary(); } }),
+    h('div', { class: 'th', onclick: () => window.open(i.url, '_blank') }, i.kind === 'video' ? h('video', { src: i.url, preload: 'metadata', muted: true, playsinline: true }) : h('img', { src: i.url, loading: 'lazy' })),
+    h('div', { class: 'inf' }, h('b', { title: i.name }, i.name), h('span', {}, `${i.ext.toUpperCase()} · ${fmtSize(i.size)}`), ' ', h('a', { class: 'link', href: i.url + '?download=1' }, '⬇')))));
+  const n = [...L.sel].length; $('#libZipSel').disabled = !n; $('#libDel').disabled = !n; $('#libZipSel').textContent = n ? `⬇ Download selected (${n}) .zip` : '⬇ Download selected (.zip)';
+  $('#libAll').disabled = !L.items.length;
+}
+async function libZip(body) {
+  $('#libErr').textContent = '';
+  try { const r = await post('/api/library/zip', body); const a = h('a', { href: r.url }); document.body.append(a); a.click(); a.remove(); }
+  catch (e) { $('#libErr').textContent = e.message; }
+}
+$('#libAll').onclick = () => libZip({ all: true });
+$('#libZipSel').onclick = () => libZip({ files: [...L.sel] });
+$('#libSelAll').onclick = () => { shown().forEach(i => L.sel.add(i.file)); drawLibrary(); };
+$('#libSelNone').onclick = () => { L.sel.clear(); drawLibrary(); };
+$('#libKind').onclick = e => { const b = e.target.closest('button'); if (!b) return; L.kind = b.dataset.f; document.querySelectorAll('#libKind .chip').forEach(x => x.classList.toggle('on', x === b)); drawLibrary(); };
+$('#libFolder').onchange = e => { L.folder = e.target.value; drawLibrary(); };
+$('#libBulk').onclick = () => showTab('bulk');
+$('#libDel').onclick = async () => {
+  const n = L.sel.size; if (!n || !confirm(`Permanently delete ${n} file${n > 1 ? 's' : ''} from the outputs folder?`)) return;
+  try { await post('/api/library/delete', { files: [...L.sel] }); L.sel.clear(); await loadLibrary(); } catch (e) { $('#libErr').textContent = e.message; }
+};
+
 // ================================================================ boot
 (async () => {
   Object.assign(info, await api('/api/info'));
   if (!info.env.ffmpeg || !info.env.libx264) $('#ffwarn').style.display = '';
   const t = await api('/api/themes'); themes = t.themes; themeOpts = t.options;
   B = info.brand; bName = info.brand_name;
-  await Promise.all([loadAssets(), loadBrandList(info.brand_name)]);
+  await Promise.all([loadAssets(), loadBrandList(info.brand_name), loadLibrary()]);
   drawSizes(); drawFormats(); drawThemes(); drawBrand(); drawBulkSizes(); drawBulkFormats();
   $('#text').value = store.get('ms_text', '') ; if (!$('#text').value) $('#text').value = EXAMPLES['Script (one line per scene)'];
-  const tab = location.hash.slice(1); showTab(['create', 'brand', 'bulk'].includes(tab) ? tab : 'create'); gen();
+  const tab = location.hash.slice(1); showTab(['create', 'brand', 'bulk', 'library'].includes(tab) ? tab : 'create'); gen();
 })().catch(e => { $('#genErr').textContent = e.message; });
 </script>
 </body>
