@@ -1,0 +1,33 @@
+{
+  "name": "sale-flash",
+  "width": 1080, "height": 1920, "fps": 30,
+  "transition": {"type": "slide-left", "duration": 0.5},
+  "scenes": [
+    {
+      "duration": 3,
+      "background": {"type": "gradient", "colors": ["#ff3d00", "#ff9100"], "angle": 160},
+      "layers": [
+        {"type": "shape", "shape": "circle", "x": 0.85, "y": 0.12, "w": 0.55, "color": "#ffffff", "opacity": 0.12, "in": "zoom", "anim_dur": 0.8},
+        {"type": "text", "text": "FLASH SALE", "x": 0.5, "y": 0.38, "size": 0.12, "color": "#ffffff", "font": "sans-bold", "shadow": true, "in": "pop", "anim_dur": 0.7},
+        {"type": "text", "text": "24 hours only", "x": 0.5, "y": 0.52, "size": 0.05, "color": "#fff3e0", "start": 0.5, "in": "slide-up"}
+      ]
+    },
+    {
+      "duration": 3,
+      "background": {"type": "color", "color": "#0f172a"},
+      "layers": [
+        {"type": "text", "text": "UP TO", "x": 0.5, "y": 0.34, "size": 0.06, "color": "#94a3b8", "in": "fade"},
+        {"type": "text", "text": "50% OFF", "x": 0.5, "y": 0.47, "size": 0.15, "color": "#fbbf24", "shadow": true, "start": 0.3, "in": "pop", "anim_dur": 0.7},
+        {"type": "text", "text": "Everything in store", "x": 0.5, "y": 0.62, "size": 0.05, "color": "#e2e8f0", "start": 0.9, "in": "slide-up"}
+      ]
+    },
+    {
+      "duration": 3,
+      "background": {"type": "gradient", "colors": ["#7c3aed", "#2563eb"], "angle": 180},
+      "layers": [
+        {"type": "text", "text": "Shop now", "x": 0.5, "y": 0.45, "size": 0.1, "color": "#ffffff", "in": "zoom"},
+        {"type": "text", "text": "yourbrand.com", "x": 0.5, "y": 0.58, "size": 0.05, "color": "#ffffff", "box": {"color": "#000000", "opacity": 0.35, "pad": 0.025, "radius": 1}, "start": 0.6, "in": "slide-up"}
+      ]
+    }
+  ]
+}

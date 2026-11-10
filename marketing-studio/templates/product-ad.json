@@ -1,0 +1,35 @@
+{
+  "name": "product-ad",
+  "width": 1080, "height": 1350, "fps": 30,
+  "transition": {"type": "fade", "duration": 0.6},
+  "scenes": [
+    {
+      "duration": 3.5,
+      "background": {"type": "gradient", "colors": ["#fdfbfb", "#ebedee"], "angle": 180},
+      "layers": [
+        {"type": "text", "text": "Meet the all-new", "x": 0.5, "y": 0.3, "size": 0.05, "color": "#475569", "in": "fade"},
+        {"type": "text", "text": "Your Product", "x": 0.5, "y": 0.42, "size": 0.12, "color": "#0f172a", "start": 0.3, "in": "slide-up", "anim_dur": 0.7},
+        {"type": "text", "text": "Replace with image layer: add your packshot in assets/", "x": 0.5, "y": 0.62, "size": 0.032, "w": 0.7, "color": "#94a3b8", "start": 0.8, "in": "fade"}
+      ]
+    },
+    {
+      "duration": 3.5,
+      "background": {"type": "color", "color": "#111827"},
+      "layers": [
+        {"type": "text", "text": "Why you'll love it", "x": 0.5, "y": 0.2, "size": 0.06, "color": "#f9fafb", "in": "fade"},
+        {"type": "text", "text": "Fast.", "x": 0.5, "y": 0.4, "size": 0.1, "color": "#34d399", "start": 0.4, "in": "slide-right"},
+        {"type": "text", "text": "Simple.", "x": 0.5, "y": 0.52, "size": 0.1, "color": "#60a5fa", "start": 1.0, "in": "slide-left"},
+        {"type": "text", "text": "Yours.", "x": 0.5, "y": 0.64, "size": 0.1, "color": "#f472b6", "start": 1.6, "in": "slide-right"}
+      ]
+    },
+    {
+      "duration": 3,
+      "background": {"type": "gradient", "colors": ["#2563eb", "#7c3aed"], "angle": 150},
+      "layers": [
+        {"type": "text", "text": "Order today", "x": 0.5, "y": 0.42, "size": 0.1, "color": "#ffffff", "in": "zoom"},
+        {"type": "text", "text": "Free delivery • 30-day returns", "x": 0.5, "y": 0.55, "size": 0.04, "color": "#e0e7ff", "start": 0.5, "in": "fade"},
+        {"type": "text", "text": "yourbrand.com", "x": 0.5, "y": 0.7, "size": 0.05, "color": "#111827", "box": {"color": "#ffffff", "opacity": 1, "pad": 0.025, "radius": 1}, "start": 0.9, "in": "pop"}
+      ]
+    }
+  ]
+}
