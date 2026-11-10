@@ -52,7 +52,9 @@ PRESETS = [
 PRESET_BY_ID = {p["id"]: p for p in PRESETS}
 
 MAX_EDGE = 4096
-ANIMS_IN = ("none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "zoom", "pop")
+# H.264 quality ladder: (crf, x264 preset)
+QUALITY = {"standard": (23, "veryfast"), "hd": (18, "medium"), "ultra": (14, "slow")}
+ANIMS_IN = ("none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "zoom", "pop", "wipe")
 ANIMS_OUT = ("none", "fade", "slide-down", "zoom")
 TRANSITIONS = ("none", "fade", "slide-left", "slide-up")
 
@@ -210,6 +212,9 @@ def normalize(spec) -> dict:
     if not isinstance(spec, dict):
         raise SpecError("Spec must be a JSON object")
     s = json.loads(json.dumps(spec))
+    if '"$' in json.dumps(s) or "{{brand." in json.dumps(s):
+        import brand as _brand  # lazy: brand.py imports engine
+        s = _brand.apply_tokens(s)
     s["name"] = str(s.get("name") or "untitled")[:80]
     s["width"] = _even(num(s.get("width"), 1080, 64, MAX_EDGE, "width"))
     s["height"] = _even(num(s.get("height"), 1920, 64, MAX_EDGE, "height"))
@@ -244,7 +249,7 @@ def normalize(spec) -> dict:
 
 
 # --------------------------------------------------------------------------- drawing
-def make_gradient(W, H, colors, angle) -> Image.Image:
+def make_gradient(W, H, colors, angle, g=128) -> Image.Image:
     """CSS-style linear gradient (0deg = up, 90deg = right, 180deg = down)."""
     stops = [parse_color(c) for c in (colors or ["#000000", "#ffffff"])]
     if len(stops) < 2:
@@ -252,7 +257,6 @@ def make_gradient(W, H, colors, angle) -> Image.Image:
     a = math.radians(angle)
     dx, dy = math.sin(a), -math.cos(a)
     length = abs(W * dx) + abs(H * dy) or 1
-    g = 128
     small = Image.new("RGB", (g, g))
     px = small.load()
     seg = len(stops) - 1
@@ -268,19 +272,42 @@ def make_gradient(W, H, colors, angle) -> Image.Image:
     return small.resize((W, H), Image.BICUBIC)
 
 
-def _wrap(text, font, maxw, draw):
-    out = []
-    for para in text.split("\n"):
-        cur = ""
-        for word in para.split(" "):
-            trial = f"{cur} {word}" if cur else word
-            if not cur or draw.textlength(trial, font=font) <= maxw:
-                cur = trial
+def _tokens(para):
+    """Split a paragraph into [word, accent, space_before]; *like this* marks accent words."""
+    out, space = [], False
+    for i, seg in enumerate(para.split("*")):
+        for part in re.findall(r"\s+|\S+", seg):
+            if part.isspace():
+                space = True
             else:
-                out.append(cur)
-                cur = word
-        out.append(cur)
+                out.append([part, i % 2 == 1, space or not out])
+                space = False
     return out
+
+
+def _layout(text, font, maxw, probe):
+    """Greedy word wrap. Returns [(units, width)], a unit being tokens that must not be split."""
+    space_w = probe.textlength(" ", font=font)
+    lines = []
+    for para in text.split("\n"):
+        units = []
+        for t in _tokens(para):
+            if t[2] or not units:
+                units.append([t])
+            else:
+                units[-1].append(t)
+        cur, curw = [], 0.0
+        for u in units:
+            uw = sum(probe.textlength(t[0], font=font) for t in u)
+            add = uw + (space_w if cur else 0)
+            if cur and curw + add > maxw:
+                lines.append((cur, curw))
+                cur, curw = [u], uw
+            else:
+                cur.append(u)
+                curw += add
+        lines.append((cur, curw))
+    return lines
 
 
 def _round_mask(size, radius):
@@ -335,14 +362,22 @@ class SceneRenderer:
         else:
             base = Image.new("RGB", (W, H), parse_color(bg.get("color", "#111111"))[:3])
         dim = num(bg.get("dim"), 0, 0, 0.9, "dim")
-        self._bg = (kind, base, dim)
+        vig = num(bg.get("vignette"), 0, 0, 0.9, "vignette")
+        mask = None
+        if vig:
+            mask = Image.radial_gradient("L").resize((W, H), Image.BICUBIC).point([int(max(0, i - 70) * vig * 1.4) for i in range(256)])
+        self._bg = (kind, base, dim, mask)
 
     def _bg_frame(self, t):
         if self._bg is None:
             self._build_bg()
-        kind, base, dim = self._bg
+        kind, base, dim, vmask = self._bg
         W, H = self.W, self.H
-        if kind == "image":
+        bgs = self.scene.get("background") or {}
+        if kind == "gradient" and bgs.get("drift"):
+            ang = num(bgs.get("angle"), 160, -360, 360, "angle") + num(bgs["drift"], 0, -720, 720, "drift") * clamp(t / self.dur, 0, 1)
+            frame = make_gradient(W, H, bgs.get("colors"), ang, g=48)
+        elif kind == "image":
             kb = num((self.scene.get("background") or {}).get("kenburns"), 0.0, 0, 0.5, "kenburns")
             z = 1 + kb * clamp(t / self.dur, 0, 1)
             sc = max(W / base.width, H / base.height) * z
@@ -356,6 +391,8 @@ class SceneRenderer:
             frame = base.copy()
         if dim:
             frame = Image.blend(frame, Image.new("RGB", frame.size, (0, 0, 0)), dim)
+        if vmask is not None:
+            frame.paste((0, 0, 0), mask=vmask)
         return frame
 
     # ---- layer sprites
@@ -380,21 +417,38 @@ class SceneRenderer:
         font = get_font(str(L.get("font", "sans-bold")), px)
         maxw = int(num(L.get("w"), 0.84, 0.05, 1, "w") * W)
         probe = ImageDraw.Draw(Image.new("L", (1, 1)))
-        lines = _wrap(text, font, maxw, probe)
-        spacing = int(px * (num(L.get("line_height"), 1.2, 0.8, 3, "line_height") - 1))
+        lines = _layout(text, font, maxw, probe)
+        step = int(px * num(L.get("line_height"), 1.2, 0.8, 3, "line_height"))
         align = L.get("align", "center") if L.get("align") in ("left", "center", "right") else "center"
         stroke = L.get("stroke") or {}
         sw = int(num(stroke.get("width"), 0, 0, 0.05, "stroke.width") * m)
-        joined = "\n".join(lines)
-        bbox = probe.multiline_textbbox((0, 0), joined, font=font, spacing=spacing, align=align, stroke_width=sw)
-        bbox = (math.floor(bbox[0]), math.floor(bbox[1]), math.ceil(bbox[2]), math.ceil(bbox[3]))
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        asc, desc = font.getmetrics()
+        block_w = max(w for _, w in lines)
+        tw = int(math.ceil(block_w)) + 2 * sw
+        th = (len(lines) - 1) * step + asc + desc + 2 * sw
+        space_w = probe.textlength(" ", font=font)
+        color = parse_color(L.get("color", "#ffffff"))
+        accent = parse_color(L["accent"]) if L.get("accent") else color
         box = L.get("box") if isinstance(L.get("box"), dict) else None
         bpad = int(num(box.get("pad"), 0.03, 0, 0.3, "box.pad") * m) if box else 0
-        margin = int(px * 0.5) if L.get("shadow") else 2
+        margin = int(px * 0.5) if L.get("shadow") else 3
         cw, ch = tw + 2 * (bpad + margin), th + 2 * (bpad + margin)
         sprite = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-        ox, oy = margin + bpad - bbox[0], margin + bpad - bbox[1]
+        ox, oy = margin + bpad + sw, margin + bpad + sw
+
+        def paint(img, dx, dy, col, acc, scol):
+            d = ImageDraw.Draw(img)
+            for k, (units, lw) in enumerate(lines):
+                x = ox + dx + {"left": 0, "center": (block_w - lw) / 2, "right": block_w - lw}[align]
+                y = oy + dy + k * step
+                for ui, u in enumerate(units):
+                    if ui:
+                        x += space_w
+                    for tok in u:
+                        d.text((x, y), tok[0], font=font, fill=acc if tok[1] else col, anchor="la",
+                               stroke_width=sw, stroke_fill=scol)
+                        x += probe.textlength(tok[0], font=font)
+
         if box:
             col = with_opacity(parse_color(box.get("color", "#000000")), num(box.get("opacity"), 0.6, 0, 1, "box.opacity"))
             r = int(num(box.get("radius"), 0.25, 0, 1, "box.radius") * min(cw - 2 * margin, ch - 2 * margin) / 2)
@@ -402,17 +456,16 @@ class SceneRenderer:
         if L.get("shadow"):
             sh = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
             off = max(2, int(px * 0.06))
-            ImageDraw.Draw(sh).multiline_text((ox + off, oy + off), joined, font=font, spacing=spacing,
-                                              align=align, fill=(0, 0, 0, 170), stroke_width=sw, stroke_fill=(0, 0, 0, 170))
+            dark = (0, 0, 0, 170)
+            paint(sh, off, off, dark, dark, dark)
             sprite = Image.alpha_composite(sprite, sh.filter(ImageFilter.GaussianBlur(max(1, px * 0.06))))
-        ImageDraw.Draw(sprite).multiline_text(
-            (ox, oy), joined, font=font, spacing=spacing, align=align,
-            fill=parse_color(L.get("color", "#ffffff")),
-            stroke_width=sw, stroke_fill=parse_color(stroke.get("color", "#000000")))
+        paint(sprite, 0, 0, color, accent, parse_color(stroke.get("color", "#000000")))
         return sprite
 
     def _image(self, L):
         W, H = self.W, self.H
+        if not L.get("asset"):
+            return None  # e.g. "$logo" when the brand has no logo yet
         src = load_image(L.get("asset"))
         tw = max(1, int(num(L.get("w"), 0.5, 0.01, 4, "w") * W))
         if L.get("h") is not None:  # fixed box -> cover crop
@@ -438,9 +491,9 @@ class SceneRenderer:
         w = max(1, int(num(L.get("w"), 0.5, 0.001, 4, "w") * W))
         h = w if kind == "circle" else max(1, int(num(L.get("h"), 0.1, 0.001, 4, "h") * H))
         k = 2 if w * h < 4_000_000 else 1  # supersample for smooth edges
-        im = Image.new("RGBA", (w * k, h * k), (0, 0, 0, 0))
-        d = ImageDraw.Draw(im)
         fill = parse_color(L.get("color", "#ffffff"))
+        im = Image.new("RGBA", (w * k, h * k), fill[:3] + (0,))
+        d = ImageDraw.Draw(im)
         stroke = L.get("stroke") or {}
         sw = int(num(stroke.get("width"), 0, 0, 0.05, "stroke.width") * min(W, H) * k)
         kw = dict(fill=fill, outline=parse_color(stroke.get("color", "#ffffff")) if sw else None, width=sw)
@@ -453,6 +506,12 @@ class SceneRenderer:
             d.rectangle(box, **kw)
         if k > 1:
             im = im.resize((w, h), Image.LANCZOS)
+        blur = num(L.get("blur"), 0, 0, 0.5, "blur")
+        if blur:  # soft glow
+            r = max(1, int(blur * min(W, H)))
+            big = Image.new("RGBA", (w + 6 * r, h + 6 * r), fill[:3] + (0,))
+            big.paste(im, (3 * r, 3 * r))
+            im = big.filter(ImageFilter.GaussianBlur(r))
         if L.get("shadow"):
             im = _drop_shadow(im, min(W, H))
         return im
@@ -462,10 +521,11 @@ class SceneRenderer:
         W, H = self.W, self.H
         start = num(L.get("start"), 0, 0, 1e4, "start")
         end = num(L.get("end"), self.dur, 0, 1e4, "end")
-        ad = num(L.get("anim_dur"), 0.5, 0.05, 5, "anim_dur")
+        ad = num(L.get("anim_dur"), 0.5, 0.05, 120, "anim_dur")
         alpha, scale, dx, dy = num(L.get("opacity"), 1, 0, 1, "opacity"), 1.0, 0.0, 0.0
         p = clamp((t - start) / ad, 0, 1)
-        e = ease_out(p)
+        e = p if L.get("ease") == "linear" else ease_out(p)
+        wipe = None
         kind = L.get("in", "none")
         if kind == "fade":
             alpha *= p
@@ -481,6 +541,8 @@ class SceneRenderer:
             scale, alpha = 0.6 + 0.4 * e, alpha * p
         elif kind == "pop":
             scale, alpha = max(0.01, ease_out_back(p)), alpha * min(1, p * 3)
+        elif kind == "wipe":
+            wipe = e
         q = ease_out(clamp((end - t) / ad, 0, 1))
         kind = L.get("out", "none")
         if kind == "fade":
@@ -489,7 +551,7 @@ class SceneRenderer:
             scale, alpha = scale * (0.6 + 0.4 * q), alpha * q
         elif kind == "slide-down":
             dy, alpha = dy + (1 - q) * 0.1 * H, alpha * q
-        return alpha, scale, dx, dy
+        return alpha, scale, dx, dy, wipe
 
     # ---- compose
     def render(self, t: float) -> Image.Image:
@@ -503,24 +565,37 @@ class SceneRenderer:
             sp = self._sprite(idx, L)
             if sp is None:
                 continue
-            alpha, scale, dx, dy = self._anim(L, t)
-            if alpha <= 0.002:
+            alpha, scale, dx, dy, wipe = self._anim(L, t)
+            mo = L.get("motion")
+            if isinstance(mo, dict):  # slow continuous drift / push-in over the scene
+                q = clamp(t / self.dur, 0, 1)
+                dx += num(mo.get("dx"), 0, -3, 3, "motion.dx") * W * q
+                dy += num(mo.get("dy"), 0, -3, 3, "motion.dy") * H * q
+                scale *= 1 + num(mo.get("scale"), 0, -0.9, 3, "motion.scale") * q
+            if alpha <= 0.002 or (wipe is not None and wipe <= 0.002):
                 continue
+            full_w = sp.width
+            if wipe is not None and wipe < 0.998:
+                sp = sp.crop((0, 0, max(1, int(full_w * wipe)), sp.height))
             if abs(scale - 1) > 0.002:
                 sp = sp.resize((max(1, int(sp.width * scale)), max(1, int(sp.height * scale))), Image.BILINEAR)
+                full_w = int(full_w * scale)
             if alpha < 0.998:
                 sp = sp.copy()
                 sp.putalpha(sp.getchannel("A").point([int(i * alpha) for i in range(256)]))
             cx = num(L.get("x"), 0.5, -2, 3, "x") * W + dx
             cy = num(L.get("y"), 0.5, -2, 3, "y") * H + dy
-            frame.paste(sp, (int(cx - sp.width / 2), int(cy - sp.height / 2)), sp)
+            frame.paste(sp, (int(cx - full_w / 2), int(cy - sp.height / 2)), sp)
         return frame
 
     def poster_time(self) -> float:
-        """Time at which every layer's entrance animation has finished."""
+        """Time at which every layer's entrance animation has finished (ignores scene-long progress bars)."""
         t = 0.0
         for L in self.scene.get("layers", []):
-            t = max(t, num(L.get("start"), 0, 0, 1e4) + (num(L.get("anim_dur"), 0.5, 0.05, 5) if L.get("in", "none") != "none" else 0))
+            ad = num(L.get("anim_dur"), 0.5, 0.05, 120) if L.get("in", "none") != "none" else 0
+            if ad >= 0.8 * self.dur:
+                continue
+            t = max(t, num(L.get("start"), 0, 0, 1e4) + ad)
         return min(t + 0.05, self.dur - 0.01)
 
 
@@ -540,6 +615,13 @@ class Composer:
             t += r.dur - (self.tdur if i < len(self.scenes) - 1 else 0)
         last = len(self.scenes) - 1
         self.total = self.starts[last] + self.scenes[last].dur
+
+    def poster_global(self, i: int) -> float:
+        """Global time showing scene i fully built and outside any transition overlap."""
+        r, n = self.scenes[i], len(self.scenes)
+        lo = (self.tdur + 0.05) if i > 0 else 0.0
+        hi = r.dur - (self.tdur if i < n - 1 else 0) - 0.02
+        return self.starts[i] + clamp(r.poster_time(), min(lo, hi), max(lo, hi))
 
     def frame(self, t: float) -> Image.Image:
         t = clamp(t, 0, self.total - 1e-4)
@@ -606,7 +688,7 @@ def _out_name(spec_name, label, w, h, suffix, ext):
     return f"{slug(spec_name)}_{label}_{w}x{h}{suffix}_{time.strftime('%H%M%S')}.{ext}"
 
 
-def render_video(spec, out_path: Path, W, H, fps=None, fmt="mp4", progress=None, cancel=None, audio=True):
+def render_video(spec, out_path: Path, W, H, fps=None, fmt="mp4", progress=None, cancel=None, audio=True, quality="hd"):
     ff = ffmpeg_bin()
     if not ff:
         raise SpecError("ffmpeg not found. Install it (see README) or set FFMPEG_BIN. Image export still works without it.")
@@ -631,7 +713,8 @@ def render_video(spec, out_path: Path, W, H, fps=None, fmt="mp4", progress=None,
         cmd += ["-vf", f"fps={gfps},scale={gw}:-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5",
                 "-loop", "0"]
     else:
-        cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+        crf, preset = QUALITY.get(quality, QUALITY["hd"])
+        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-profile:v", "high", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart"]
     cmd += ["-t", f"{total:.3f}", str(out_path)]
     err = tempfile.TemporaryFile()
@@ -684,11 +767,13 @@ def render_images(spec, out_dir: Path, W, H, label, scene=None, fmt="png"):
 
 
 def export(spec, targets, fmt="mp4", fps=None, scene=None, out_dir: Path = OUTPUTS,
-           progress=None, cancel=None) -> list[Path]:
+           progress=None, cancel=None, quality="hd") -> list[Path]:
     """Render `spec` for every target. Returns the files written."""
     if fmt not in ("mp4", "gif", "png", "jpg"):
         raise SpecError("format must be mp4, gif, png or jpg")
-    normalize(spec)  # fail fast
+    if quality not in QUALITY:
+        raise SpecError("quality must be standard, hd or ultra")
+    spec = normalize(spec)  # fail fast; also resolves brand tokens
     if not targets:
         raise SpecError("Pick at least one output size")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -700,7 +785,7 @@ def export(spec, targets, fmt="mp4", fps=None, scene=None, out_dir: Path = OUTPU
                 progress((k + p) / len(resolved))
         name = _out_name(spec.get("name", "untitled"), label, w, h, "", fmt)
         if fmt in ("mp4", "gif"):
-            files.append(render_video(spec, out_dir / name, w, h, fps, fmt, sub, cancel))
+            files.append(render_video(spec, out_dir / name, w, h, fps, fmt, sub, cancel, quality=quality))
         else:
             files += render_images(spec, out_dir, w, h, label, scene, fmt)
             sub(1.0)

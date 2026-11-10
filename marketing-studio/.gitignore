@@ -6,3 +6,5 @@ projects/*
 !projects/.gitkeep
 __pycache__/
 *.pyc
+brands/*
+!brands/.gitkeep

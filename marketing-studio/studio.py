@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 import uuid
+import zipfile
 import webbrowser
 from collections import OrderedDict
 from http import HTTPStatus
@@ -26,8 +27,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import brand as brandmod
+import bulk
 import engine
-from engine import ASSETS, OUTPUTS, PROJECTS, ROOT, TEMPLATES, SpecError
+import generator
+from engine import ASSETS, FONTS, OUTPUTS, PROJECTS, ROOT, TEMPLATES, SpecError
 
 STATIC = ROOT / "static"
 MAX_BODY = 4 * 1024 * 1024          # JSON bodies
@@ -38,16 +42,21 @@ NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.\-]{0,80}$")
 
 # --------------------------------------------------------------------------- jobs
 class Job:
-    def __init__(self, spec, targets, fmt, fps, scene):
+    """A background task. `fn(job)` does the work, sets job.files / job.warnings and updates job.progress."""
+
+    def __init__(self, fn):
         self.id = uuid.uuid4().hex[:10]
-        self.spec, self.targets, self.fmt, self.fps, self.scene = spec, targets, fmt, fps, scene
+        self.fn = fn
         self.status, self.progress, self.error = "queued", 0.0, None
         self.files: list[Path] = []
+        self.warnings: list[str] = []
         self.cancel = threading.Event()
 
     def to_json(self):
+        rel = lambda f: f.relative_to(OUTPUTS).as_posix()
         return {"id": self.id, "status": self.status, "progress": round(self.progress, 3), "error": self.error,
-                "outputs": [{"file": f.name, "url": "/outputs/" + f.name} for f in self.files]}
+                "warnings": self.warnings, "zip": f"/api/jobs/{self.id}/zip" if len(self.files) > 1 else None,
+                "outputs": [{"file": f.name, "url": "/outputs/" + rel(f)} for f in self.files]}
 
 
 JOBS: "OrderedDict[str, Job]" = OrderedDict()
@@ -61,8 +70,7 @@ def run_job(job: Job):
             return
         job.status = "running"
         try:
-            job.files = engine.export(job.spec, job.targets, job.fmt, job.fps, job.scene,
-                                      progress=lambda p: setattr(job, "progress", p), cancel=job.cancel)
+            job.fn(job)
             job.progress, job.status = 1.0, "done"
         except engine.Cancelled:
             job.status = "cancelled"
@@ -70,6 +78,47 @@ def run_job(job: Job):
             job.status, job.error = "error", str(e)
         except Exception as e:  # never kill the worker silently
             job.status, job.error = "error", f"Unexpected error: {e}"
+
+
+def start_job(fn) -> Job:
+    job = Job(fn)
+    JOBS[job.id] = job
+    while len(JOBS) > 50:
+        JOBS.popitem(last=False)
+    threading.Thread(target=run_job, args=(job,), daemon=True).start()
+    return job
+
+
+def _progress(job):
+    return lambda p: setattr(job, "progress", p)
+
+
+def _named_spec(name):
+    """Load a saved project or bundled template by name (or raise)."""
+    for base in (PROJECTS, TEMPLATES):
+        f = base / f"{Path(str(name)).name}.json"
+        if f.is_file():
+            return json.loads(f.read_text("utf-8"))
+    raise SpecError(f"No project or template named {name!r}")
+
+
+def _size(v):
+    if v is None:
+        return (1080, 1920)
+    w, h, _ = engine.resolve_target(v)
+    return (w, h)
+
+
+def do_generate(b):
+    spec, meta = generator.generate(
+        b.get("text"), kind=b.get("kind") or "video", theme=b.get("theme") or None,
+        brand=b.get("brand_name") or None, brand_override=b.get("brand") or None, size=_size(b.get("size")),
+        cta=b.get("cta"), url=b.get("url"), images=b.get("images") or [], music=b.get("music") or None,
+        target=b.get("target") or None, logo=b.get("logo", True), name=b.get("name") or None)
+    comp = engine.Composer(spec, 270, 480)
+    scenes = [{"start": round(comp.starts[i], 3), "end": round(comp.starts[i] + r.dur, 3),
+               "poster": round(comp.poster_global(i), 3)} for i, r in enumerate(comp.scenes)]
+    return {"spec": spec, "meta": meta, "timeline": {"total": round(comp.total, 3), "scenes": scenes}}
 
 
 # --------------------------------------------------------------------------- preview cache
@@ -230,7 +279,30 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/info":
                 return self._json({"presets": engine.PRESETS, "fonts": engine.FONT_CHOICES + engine.user_fonts(),
                                    "anims_in": engine.ANIMS_IN, "anims_out": engine.ANIMS_OUT,
-                                   "transitions": engine.TRANSITIONS, "env": engine.environment_report()})
+                                   "transitions": engine.TRANSITIONS, "env": engine.environment_report(),
+                                   "qualities": list(engine.QUALITY), "brand": brandmod.load(), "brand_name": brandmod.active_name()})
+            if path == "/api/brands":
+                return self._json({"brands": brandmod.list_brands(), "active": brandmod.active_name()})
+            m = re.fullmatch(r"/api/brands/([^/]+)", path)
+            if m and m[1] != "active":
+                name = unquote(m[1])
+                return self._json({"name": name, "brand": brandmod.load(name), "exists": name in brandmod.list_brands()})
+            if path == "/api/themes":
+                return self._json({"themes": generator.theme_cards(brandmod.load()), "options": generator.THEME_OPTIONS})
+            if path == "/api/sample.csv":
+                return self._send(200, bulk.SAMPLE_CSV.encode(), "text/csv", {"Content-Disposition": 'attachment; filename="sample-bulk.csv"'})
+            m = re.fullmatch(r"/api/jobs/([0-9a-f]+)/zip", path)
+            if m:
+                job = JOBS.get(m[1])
+                if not job or not job.files:
+                    return self._err(404, "Nothing to download")
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+                    for f in job.files:
+                        z.write(f, f.relative_to(OUTPUTS).as_posix())
+                return self._send(200, buf.getvalue(), "application/zip", {"Content-Disposition": f'attachment; filename="creatives-{job.id}.zip"'})
+            if path == "/editor":
+                return self._file(STATIC / "editor.html")
             if path == "/api/assets":
                 items = sorted(p.name for p in ASSETS.iterdir() if p.is_file() and p.suffix.lower() in ASSET_EXT) if ASSETS.is_dir() else []
                 return self._json({"assets": items})
@@ -268,21 +340,66 @@ class Handler(BaseHTTPRequestHandler):
                 n = engine.normalize(self._json_body().get("spec"))
                 c = engine.Composer(n)
                 return self._json({"ok": True, "duration": round(c.total, 3)})
+            if path == "/api/generate":
+                return self._json(do_generate(self._json_body()))
+            if path == "/api/themes":
+                b = self._json_body()
+                return self._json({"themes": generator.theme_cards(brandmod.load(b.get("brand_name") or None, b.get("brand"))),
+                                   "options": generator.THEME_OPTIONS})
+            if path == "/api/brands/active":
+                brandmod.set_active(str(self._json_body().get("name", "")))
+                return self._json({"active": brandmod.active_name()})
+            if path == "/api/bulk/preview":
+                b = self._json_body()
+                cols, rows = bulk.parse_csv(b.get("csv"))
+                need = []
+                if b.get("mode") == "template" and b.get("template"):
+                    need = sorted(bulk.placeholders(_named_spec(b["template"])))
+                return self._json({"columns": cols, "count": len(rows), "sample": rows[:5], "needs": need,
+                                   "missing": [n for n in need if n not in cols]})
+            if path == "/api/bulk":
+                b = self._json_body()
+                _cols, rows = bulk.parse_csv(b.get("csv"))
+                mode = b.get("mode") or "generate"
+                if mode not in ("generate", "template"):
+                    raise SpecError("mode must be generate or template")
+                targets = b.get("targets") or []
+                for t in targets:
+                    engine.resolve_target(t)
+                if not targets:
+                    raise SpecError("Pick at least one output size")
+                fmt, quality = b.get("format", "mp4"), b.get("quality", "hd")
+                if fmt not in ("mp4", "gif", "png", "jpg") or quality not in engine.QUALITY:
+                    raise SpecError("Bad format or quality")
+                tpl = _named_spec(b["template"]) if mode == "template" else None
+
+                def work(job):
+                    files, errs, _ = bulk.run_bulk(rows, mode, targets, fmt, quality, template=tpl, theme=b.get("theme") or None,
+                                                   kind=b.get("kind") or "video", brand=b.get("brand_name") or None,
+                                                   images=b.get("images") or None, music=b.get("music") or None,
+                                                   target=b.get("target") or None, progress=_progress(job), cancel=job.cancel)
+                    job.files, job.warnings = files, errs
+                    if not files:
+                        raise SpecError("Nothing was rendered. " + " | ".join(errs[:3]))
+                return self._json(start_job(work).to_json(), 202)
             if path == "/api/render":
                 b = self._json_body()
-                engine.normalize(b.get("spec"))
-                for t in b.get("targets") or []:
+                spec = b.get("spec")
+                engine.normalize(spec)
+                targets, fmt, quality = b.get("targets") or [], b.get("format", "mp4"), b.get("quality", "hd")
+                for t in targets:
                     engine.resolve_target(t)
-                job = Job(b["spec"], b.get("targets") or [], b.get("format", "mp4"), b.get("fps"), b.get("scene"))
-                if job.fmt not in ("mp4", "gif", "png", "jpg"):
+                if fmt not in ("mp4", "gif", "png", "jpg"):
                     raise SpecError("format must be mp4, gif, png or jpg")
-                if not job.targets:
+                if quality not in engine.QUALITY:
+                    raise SpecError("quality must be standard, hd or ultra")
+                if not targets:
                     raise SpecError("Pick at least one output size")
-                JOBS[job.id] = job
-                while len(JOBS) > 50:
-                    JOBS.popitem(last=False)
-                threading.Thread(target=run_job, args=(job,), daemon=True).start()
-                return self._json(job.to_json(), 202)
+
+                def work(job):
+                    job.files = engine.export(spec, targets, fmt, b.get("fps"), b.get("scene"), progress=_progress(job),
+                                              cancel=job.cancel, quality=quality)
+                return self._json(start_job(work).to_json(), 202)
             m = re.fullmatch(r"/api/jobs/([0-9a-f]+)/cancel", path)
             if m:
                 job = JOBS.get(m[1])
@@ -311,6 +428,22 @@ class Handler(BaseHTTPRequestHandler):
                 PROJECTS.mkdir(exist_ok=True)
                 (PROJECTS / f"{name}.json").write_text(json.dumps(spec, indent=2), "utf-8")
                 return self._json({"saved": name})
+            m = re.fullmatch(r"/api/brands/([^/]+)", path)
+            if m:
+                return self._json({"saved": brandmod.save(unquote(m[1]), self._json_body())})
+            m = re.fullmatch(r"/api/fonts/([^/]+)", path)
+            if m:
+                name = Path(unquote(m[1])).name
+                if not NAME_RE.match(name) or Path(name).suffix.lower() not in (".ttf", ".otf"):
+                    raise SpecError("Fonts must be .ttf or .otf files")
+                data = self._body(25 * 1024 * 1024)
+                if data[:4] not in (b"\x00\x01\x00\x00", b"OTTO", b"true"):
+                    raise SpecError("That file does not look like a TrueType/OpenType font")
+                FONTS.mkdir(exist_ok=True)
+                (FONTS / name).write_bytes(data)
+                engine._font_index = None
+                engine.get_font.cache_clear()
+                return self._json({"saved": name})
             m = re.fullmatch(r"/api/assets/([^/]+)", path)
             if m:
                 name = Path(unquote(m[1])).name
@@ -330,12 +463,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard(True):
             return
         path = urlparse(self.path).path
-        m = re.fullmatch(r"/api/(assets|projects|outputs)/([^/]+)", path)
+        m = re.fullmatch(r"/api/(assets|projects|outputs|brands)/([^/]+)", path)
         if not m:
             return self._err(404, "Not found")
-        base = {"assets": ASSETS, "projects": PROJECTS, "outputs": OUTPUTS}[m[1]]
+        base = {"assets": ASSETS, "projects": PROJECTS, "outputs": OUTPUTS, "brands": brandmod.BRANDS}[m[1]]
         name = unquote(m[2])
-        if m[1] == "projects":
+        if m[1] in ("projects", "brands"):
             name += ".json"
         f = self._safe_in(base, name)
         if not f:
@@ -376,6 +509,17 @@ def cmd_serve(a):
         print("\nbye")
 
 
+def _cli_progress():
+    last = [-1]
+
+    def f(p):
+        pct = int(p * 100) // 5 * 5
+        if pct != last[0]:
+            last[0] = pct
+            print(f"\r  {pct:3d}%", end="", file=sys.stderr, flush=True)
+    return f
+
+
 def _targets(a):
     t = list(a.preset or []) + list(a.size or [])
     return t or ["reels"]
@@ -384,8 +528,8 @@ def _targets(a):
 def cmd_render(a, fmt=None):
     spec = load_spec(a.spec)
     fmt = fmt or a.format
-    files = engine.export(spec, _targets(a), fmt, a.fps, getattr(a, "scene", None),
-                          progress=lambda p: print(f"\r  {p * 100:5.1f}%", end="", file=sys.stderr))
+    files = engine.export(spec, _targets(a), fmt, a.fps, getattr(a, "scene", None), quality=getattr(a, "quality", "hd"),
+                          progress=_cli_progress())
     print(file=sys.stderr)
     for f in files:
         print(f)
@@ -394,6 +538,66 @@ def cmd_render(a, fmt=None):
 def cmd_image(a):
     a.scene = None if a.scene is None else a.scene - 1
     cmd_render(a, fmt=a.format if a.format in ("png", "jpg") else "png")
+
+
+def _read_text(arg: str) -> str:
+    if arg.startswith("@"):
+        try:
+            return Path(arg[1:]).read_text("utf-8")
+        except OSError as e:
+            raise SpecError(f"Cannot read {arg[1:]}: {e}")
+    return arg
+
+
+def cmd_make(a):
+    first = engine.resolve_target(_targets(a)[0])
+    spec, meta = generator.generate(_read_text(a.text), kind=a.kind, theme=a.theme, brand=a.brand, size=(first[0], first[1]),
+                                    cta=a.cta, url=a.url, images=a.image, music=a.music, target=a.length, logo=not a.no_logo,
+                                    name=a.name)
+    for w in meta["warnings"]:
+        print("warning:", w, file=sys.stderr)
+    if a.save:
+        Path(a.save).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.save).write_text(json.dumps(spec, indent=2), "utf-8")
+        print(f"saved {a.save}", file=sys.stderr)
+    if a.no_render:
+        return
+    fmt = a.format or ("mp4" if a.kind == "video" else "png")
+    files = engine.export(spec, _targets(a), fmt, a.fps, None, quality=a.quality,
+                          progress=_cli_progress())
+    print(file=sys.stderr)
+    for f in files:
+        print(f)
+
+
+def cmd_bulk(a):
+    _cols, rows = bulk.parse_csv(Path(a.csv).read_text("utf-8-sig") if Path(a.csv).is_file() else (_ for _ in ()).throw(SpecError(f"File not found: {a.csv}")))
+    mode = "template" if a.template else "generate"
+    tpl = None
+    if a.template:
+        tpl = json.loads(Path(a.template).read_text("utf-8")) if Path(a.template).is_file() else _named_spec(a.template)
+    files, errs, out_dir = bulk.run_bulk(rows, mode, _targets(a), a.format, a.quality, template=tpl, theme=a.theme, kind=a.kind,
+                                         brand=a.brand, images=a.image, music=a.music, target=a.length, fps=a.fps,
+                                         progress=_cli_progress())
+    print(file=sys.stderr)
+    for f in files:
+        print(f)
+    for e in errs:
+        print("skipped:", e, file=sys.stderr)
+    if not files:
+        sys.exit(1)
+
+
+def cmd_brand(a):
+    if a.action == "list":
+        act = brandmod.active_name()
+        for n in brandmod.list_brands() or ["(none saved yet; the editor's Brand tab creates one)"]:
+            print(("* " if n == act else "  ") + n)
+    elif a.action == "use":
+        brandmod.set_active(a.name)
+        print("active brand:", a.name)
+    else:
+        print(json.dumps(brandmod.load(a.name), indent=2))
 
 
 def cmd_presets(_a):
@@ -429,9 +633,49 @@ def main(argv=None):
         r.add_argument("--size", action="append", help="custom WxH (repeatable)")
         r.add_argument("-f", "--format", default="mp4" if name == "render" else "png")
         r.add_argument("--fps", type=int)
+        r.add_argument("-q", "--quality", default="hd", choices=list(engine.QUALITY))
         if name == "image":
             r.add_argument("--scene", type=int, help="1-based scene number (default: all)")
         r.set_defaults(fn=fn)
+    mk = sub.add_parser("make", help="generate a themed video/image from a sentence, paragraph or script (or @file.txt)")
+    mk.add_argument("text")
+    mk.add_argument("-k", "--kind", default="video", choices=["video", "image", "carousel"])
+    mk.add_argument("-t", "--theme", choices=list(generator.THEMES))
+    mk.add_argument("-b", "--brand", help="brand profile name (default: active)")
+    mk.add_argument("-p", "--preset", action="append")
+    mk.add_argument("--size", action="append")
+    mk.add_argument("-f", "--format")
+    mk.add_argument("-q", "--quality", default="hd", choices=list(engine.QUALITY))
+    mk.add_argument("--cta")
+    mk.add_argument("--url")
+    mk.add_argument("--image", action="append", help="asset file name (repeatable, applied to scenes in order)")
+    mk.add_argument("--music")
+    mk.add_argument("--length", type=float, help="target length in seconds")
+    mk.add_argument("--name")
+    mk.add_argument("--fps", type=int)
+    mk.add_argument("--no-logo", action="store_true")
+    mk.add_argument("--save", help="also save the generated spec JSON here (open it in the editor later)")
+    mk.add_argument("--no-render", action="store_true")
+    mk.set_defaults(fn=cmd_make)
+    bk = sub.add_parser("bulk", help="one creative per CSV row")
+    bk.add_argument("csv")
+    bk.add_argument("--template", help="project/template name or JSON path with {{column}} placeholders (default: generate from script column)")
+    bk.add_argument("-k", "--kind", default="video", choices=["video", "image", "carousel"])
+    bk.add_argument("-t", "--theme", choices=list(generator.THEMES))
+    bk.add_argument("-b", "--brand")
+    bk.add_argument("-p", "--preset", action="append")
+    bk.add_argument("--size", action="append")
+    bk.add_argument("-f", "--format", default="mp4")
+    bk.add_argument("-q", "--quality", default="hd", choices=list(engine.QUALITY))
+    bk.add_argument("--image", action="append")
+    bk.add_argument("--music")
+    bk.add_argument("--length", type=float)
+    bk.add_argument("--fps", type=int)
+    bk.set_defaults(fn=cmd_bulk)
+    br = sub.add_parser("brand", help="list / show / switch brand profiles")
+    br.add_argument("action", choices=["list", "show", "use"])
+    br.add_argument("name", nargs="?")
+    br.set_defaults(fn=cmd_brand)
     sub.add_parser("presets", help="list size presets").set_defaults(fn=cmd_presets)
     sub.add_parser("check", help="verify ffmpeg/Pillow").set_defaults(fn=cmd_check)
     v = sub.add_parser("validate", help="validate a spec")

@@ -1,0 +1,19 @@
+{
+  "name": "offer-card",
+  "width": 1080, "height": 1350, "fps": 30,
+  "transition": {"type": "none"},
+  "scenes": [
+    {
+      "duration": 5,
+      "background": {"type": "gradient", "colors": ["$primary", "$secondary"], "angle": 150, "drift": 30},
+      "layers": [
+        {"type": "image", "asset": "$logo", "x": 0.5, "y": 0.1, "w": 0.28, "in": "fade"},
+        {"type": "text", "text": "{{headline}}", "x": 0.5, "y": 0.34, "size": 0.09, "w": 0.84, "color": "#ffffff", "accent": "$accent", "font": "$font_heading", "upper": true, "shadow": true, "in": "pop", "start": 0.2},
+        {"type": "text", "text": "{{price}}", "x": 0.5, "y": 0.56, "size": 0.2, "color": "$accent", "font": "$font_heading", "shadow": true, "in": "zoom", "start": 0.7, "motion": {"scale": 0.05}},
+        {"type": "shape", "shape": "rounded", "x": 0.5, "y": 0.8, "w": 0.6, "h": 0.08, "radius": 1, "color": "$accent", "shadow": true, "in": "pop", "start": 1.2},
+        {"type": "text", "text": "{{brand.cta}}", "x": 0.5, "y": 0.8, "size": 0.04, "color": "$dark", "font": "$font_heading", "upper": true, "in": "fade", "start": 1.4},
+        {"type": "text", "text": "{{brand.url}}", "x": 0.5, "y": 0.9, "size": 0.035, "color": "#ffffff", "font": "$font_body", "in": "fade", "start": 1.6}
+      ]
+    }
+  ]
+}
