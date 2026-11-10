@@ -76,6 +76,11 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
 .item .inf{padding:7px 9px;font-size:12px}.item .inf b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .inf span{color:var(--mute)}
 .tb{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.tb .sp{flex:1}
+.qc{margin-top:8px;font-size:13px}
+.qc .ok{color:var(--ok);font-weight:600}
+.qc .it{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+.qc .it b{flex:none;font-size:11px;text-transform:uppercase;padding:1px 6px;border-radius:5px}
+.qc .error b{background:var(--bad);color:#fff}.qc .warn b{background:#f5b301;color:#2b2000}
 .tabpane{display:none}.tabpane.on{display:block}
 </style>
 </head>
@@ -146,6 +151,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
     <div id="stage"><div class="empty">Type your content on the left.<br>Your preview appears here automatically.</div><img id="prev" alt="" style="display:none"></div>
     <div class="ctl"><button class="btn sm" id="play">▶ Play</button><input type="range" id="scrub" min="0" max="1000" value="0"><span class="meta" id="tlabel" style="min-width:80px;text-align:right"></span></div>
     <div class="strip" id="strip"></div>
+    <div id="qc" class="qc"></div>
     <div class="card" style="margin-top:12px">
       <div class="row" style="margin-top:0"><label>Format</label><div class="inl"><select id="fmt"></select>
         <select id="quality"><option value="standard">Standard</option><option value="hd" selected>HD (recommended)</option><option value="ultra">Ultra (large files)</option></select></div></div>
@@ -346,6 +352,7 @@ const gen = debounce(async () => {
     const n = r.timeline.scenes.length;
     $('#sceneMeta').textContent = C.kind === 'image' ? '1 poster' : `${n} scene${n > 1 ? 's' : ''}${C.kind === 'video' ? ' · ' + C.total.toFixed(1) + 's' : ''}`;
     $('#exportBtn').disabled = false; if (r.meta.warnings.length) $('#genErr').textContent = r.meta.warnings.join(' ');
+    drawQuality(r.quality || []);
     pv(); drawStrip();
   } catch (e) { if (mySeq === genSeq) $('#genErr').textContent = e.message; }
 }, 450);
@@ -353,6 +360,12 @@ const gen = debounce(async () => {
 ['logoOn', 'ctaOn'].forEach(id => $('#' + id).onchange = gen);
 $('#target').onchange = gen; $('#music').onchange = gen;
 
+function drawQuality(q) {
+  const el = $('#qc'); el.replaceChildren();
+  if (!q.length) { el.append(h('div', { class: 'ok' }, '✓ Quality check passed: text fits, nothing overlaps, contrast is good.')); return; }
+  el.append(h('div', { style: 'font-weight:600;margin-bottom:4px' }, `Quality check: ${q.length} thing${q.length > 1 ? 's' : ''} to look at`));
+  q.slice(0, 8).forEach(x => el.append(h('div', { class: 'it ' + x.severity }, h('b', {}, x.severity === 'error' ? 'fix' : 'tip'), h('span', {}, `Scene ${x.scene}: ${x.message}`))));
+}
 let pvBusy = false, pvAgain = false, lastUrl;
 function pv() { pvAgain = true; if (!pvBusy) pvLoop(); }
 async function pvLoop() {

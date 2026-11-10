@@ -72,7 +72,7 @@ def recipe(kind, B):
     text = best_text(mid, B)
     hl = next((c for c in (A, P, S, D, Lt, (255, 255, 255), (17, 17, 17))
                if contrast(c, mid) >= 3 and contrast(c, text) >= 1.6), text)
-    sub = mix(text, mid, 0.3)
+    sub = next((c for c in (mix(text, mid, k) for k in (0.3, 0.2, 0.12, 0.05)) if contrast(c, mid) >= 4.5), text)
     btn = next((c for c in (A, P, S) if contrast(c, mid) >= 2.2 and kind != "accent"), D if kind == "accent" else text)
     return {"bg1": _hex(bg1), "bg2": _hex(bg2), "angle": ang, "text": _hex(text), "sub": _hex(sub), "hl": _hex(hl),
             "btn": _hex(btn), "btn_text": _hex(best_text(btn, B)), "dark": lum(mid) < 0.4}
@@ -263,34 +263,69 @@ def highlight_numbers(text):
 
 
 # --------------------------------------------------------------------------- text fitting
-def fit(text, font_key, w_frac, W, H, max_size, min_size, max_lines, upper=False, line_height=1.18, max_h=0.5):
+def _measure(text, font_key, w_frac, W, H, size, upper, line_height):
     m = min(W, H)
     probe = ImageDraw.Draw(Image.new("L", (1, 1)))
     t = text.upper() if upper else text
+    px = max(8, int(size * m))
+    font = engine.pick_font(font_key, px, t)
+    lines = engine._layout(t, font, int(w_frac * W), probe)
+    bh = ((len(lines) - 1) * int(px * line_height) + sum(font.getmetrics())) / H
+    bw = max(ln[1] for ln in lines)
+    longest = max((probe.textlength(w.replace("*", ""), font=font) for w in t.split()), default=0)
+    return lines, bh, bw, longest
+
+
+def fit(text, font_key, w_frac, W, H, max_size, min_size, max_lines, upper=False, line_height=1.18, max_h=0.5):
+    """Largest font size (between max and min) where the text fits the box. If even the minimum does not fit, the
+    text is shortened with an ellipsis (returned under "text") rather than shrunk until unreadable."""
+    def ok(size, txt):
+        lines, bh, bw, longest = _measure(txt, font_key, w_frac, W, H, size, upper, line_height)
+        res = {"size": round(size, 4), "lines": len(lines), "h": bh, "w": bw / W}
+        return (len(lines) <= max_lines and bh <= max_h and bw <= w_frac * W * 1.001 and longest <= w_frac * W * 1.001), res
+
     size = max_size
     while True:
-        px = max(8, int(size * m))
-        font = get_font(font_key, px)
-        lines = engine._layout(t, font, int(w_frac * W), probe)
-        bh = ((len(lines) - 1) * int(px * line_height) + sum(font.getmetrics())) / H
-        bw = max(w for _, w in lines)
-        if (len(lines) <= max_lines and bh <= max_h and bw <= w_frac * W * 1.001) or size <= min_size:
-            return {"size": round(size, 4), "lines": len(lines), "h": bh, "w": bw / W}
-        size -= 0.004
+        good, res = ok(size, text)
+        if good:
+            return res
+        if size <= min_size:
+            break
+        size = max(min_size, size - 0.004)
+    words = text.split(" ")
+    while len(words) > 1:
+        words.pop()
+        cand = " ".join(words).rstrip(" ,;:-—.\n")
+        if cand.count("*") % 2:
+            cand += "*"
+        cand += "…"
+        good, res = ok(min_size, cand)
+        if good:
+            return dict(res, text=cand)
+    return res
+
+
+def _fit(ctx, text, *a, **k):
+    r = fit(text, *a, **k)
+    if "text" in r:
+        snippet = text.replace("*", "").replace("\n", " ")
+        ctx.warnings.append(f'Shortened to fit: "{snippet[:30]}{"…" if len(snippet) > 30 else ""}"')
+    return r
 
 
 # --------------------------------------------------------------------------- scene building
 class Ctx:
-    def __init__(self, W, H, B, T, kind, logo, cta, url, n_scenes, cta_headline=None):
+    def __init__(self, W, H, B, T, kind, logo, cta, url, n_scenes, cta_headline=None, rtl=False):
         self.W, self.H, self.B, self.T, self.kind = W, H, B, T, kind
         self.land = W > H * 1.15
         self.n, self.logo, self.cta, self.url, self.cta_headline = n_scenes, logo, cta, url, cta_headline
+        self.warnings: list[str] = []
         fh, fb = B["fonts"]["heading"], B["fonts"]["body"]
         self.hfont = T["hfont"] if fh == "auto" else fh
         self.bfont = T["bfont"] if fb == "auto" else fb
         self.title_in, self.body_in, self.adur = ANIM_STYLES[T["anim"]]
         self.push, self.drift = MOTION[T["motion"]]
-        self.left = T["align"] == "left"
+        self.left = T["align"] == "left" and not rtl
         self.margin = 0.08 if not self.land else 0.07
         self.wfrac = 0.8 if not self.land else 0.7
         if self.left and self.title_in == "slide-up":
@@ -301,9 +336,11 @@ class Ctx:
 
 
 def _text(ctx, text, y, fit_, color, accent, font, **kw):
-    d = {"type": "text", "text": text, "x": ctx.x_for(fit_["w"]), "y": round(y, 4), "size": fit_["size"],
+    d = {"type": "text", "text": fit_.get("text", text), "x": ctx.margin if ctx.left else 0.5, "y": round(y, 4), "size": fit_["size"],
          "w": ctx.wfrac, "color": color, "accent": accent, "font": font,
          "align": "left" if ctx.left else "center"}
+    if ctx.left:
+        d["anchor"] = "left"
     d.update(kw)
     return d
 
@@ -398,86 +435,107 @@ def build_scene(ctx, i, item, role, bgkind, dur):
 
     if role == "cta":
         has_head = bool(ltxt)
-        head = fit(ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.1, 0.05, 3, up) if has_head else None
+        head = _fit(ctx, ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.1, 0.05, 3, up) if has_head else None
         by = 0.6 if has_head else 0.52
         if ctx.logo:
             layers.append(_logo(ctx, 0.5, 0.2 if not land else 0.22, 0.4 if not land else 0.2, start=0.1))
         if has_head:
             layers.append(_text(ctx, ltxt, 0.40 if not land else 0.42, dict(head, w=head["w"]), r["text"], r["hl"], ctx.hfont,
-                                **dict(kw_t, start=0.2)) | {"x": 0.5, "align": "center"})
+                                **dict(kw_t, start=0.2)) | {"x": 0.5, "align": "center", "anchor": "center"})
         label = ctx.cta or "Learn more"
         bw = 0.64 if not land else 0.36
-        lf = fit(label, ctx.hfont, bw * 0.82, ctx.W, ctx.H, 0.05, 0.026, 1, up)
+        lf = _fit(ctx, label, ctx.hfont, bw * 0.82, ctx.W, ctx.H, 0.05, 0.03, 1, up)
         layers.append({"type": "shape", "shape": "rounded", "x": 0.5, "y": by, "w": bw, "h": 0.085 if not land else 0.12, "radius": 1,
                        "color": r["btn"], "shadow": True, "in": "pop", "start": 0.55, "anim_dur": 0.6})
-        layers.append({"type": "text", "text": label, "x": 0.5, "y": by, "size": lf["size"], "w": bw * 0.84, "color": r["btn_text"],
+        layers.append({"type": "text", "text": lf.get("text", label), "x": 0.5, "y": by, "size": lf["size"], "w": bw * 0.84, "color": r["btn_text"],
                        "font": ctx.hfont, "upper": up, "in": "fade", "start": 0.75, "anim_dur": 0.4})
         if ctx.url:
-            uf = fit(ctx.url, ctx.bfont, 0.8, ctx.W, ctx.H, 0.045, 0.025, 1)
-            layers.append({"type": "text", "text": ctx.url, "x": 0.5, "y": by + (0.1 if not land else 0.14), "size": uf["size"], "w": 0.8,
+            uf = _fit(ctx, ctx.url, ctx.bfont, 0.8, ctx.W, ctx.H, 0.045, 0.03, 1)
+            layers.append({"type": "text", "text": uf.get("text", ctx.url), "x": 0.5, "y": by + (0.1 if not land else 0.14), "size": uf["size"], "w": 0.8,
                            "color": r["sub"], "font": ctx.bfont, "in": "fade", "start": 1.0})
     elif role == "poster":
-        head = fit(ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.13, 0.05, 5 if not land else 3, up)
-        cy = 0.36 if not land else 0.42
+        tall = ctx.H / ctx.W >= 1.7
+        by = 0.72 if tall else (0.8 if not land else 0.82)
+        bh_ = 0.075 if not land else 0.11
+        url_y = by + (0.085 if tall else 0.1 if not land else 0.12)
+        top = 0.2 if ctx.logo else 0.12
+        if not land:
+            top = max(top, 0.17)
+        bottom = (by - bh_ / 2 - 0.04) if ctx.cta else ((url_y - 0.05) if ctx.url else 0.9)
+        avail = bottom - top
+        has_sub = bool(item.get("sub"))
+        head = _fit(ctx, ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.13, 0.05, 5 if not land else 3, up, max_h=avail * (0.62 if has_sub else 1.0))
+        sf = None
+        if has_sub:
+            sf = _fit(ctx, item["sub"], ctx.bfont, ctx.wfrac, ctx.W, ctx.H, 0.05, 0.028, 4, False, max_h=max(0.05, avail - head["h"] - 0.07))
+        total = head["h"] + (0.035 if T["bar"] else 0) + ((sf["h"] + 0.02) if sf else 0)
+        y0 = top + max(0.0, (avail - total) / 2)
+        cy = y0 + head["h"] / 2
         if ctx.logo:
             layers.append(_logo(ctx, 0.5 if not ctx.left else ctx.margin + 0.14, 0.09, 0.28 if not land else 0.16, start=0.1))
         layers.append(_text(ctx, ltxt, cy, head, r["text"], r["hl"], ctx.hfont, **kw_t))
-        yb = cy + head["h"] / 2 + 0.03
+        yb = y0 + head["h"]
         if T["bar"]:
+            yb += 0.02
             layers.append(_bar(ctx, yb, r["hl"], 0.5))
-            yb += 0.03
-        if item.get("sub"):
-            sf = fit(item["sub"], ctx.bfont, ctx.wfrac, ctx.W, ctx.H, 0.05, 0.028, 4, False, max_h=0.2)
-            layers.append(_text(ctx, item["sub"], yb + sf["h"] / 2 + 0.01, sf, r["sub"], r["hl"], ctx.bfont, **{"in": ctx.body_in, "start": 0.7}))
+            yb += 0.015
+        if sf:
+            layers.append(_text(ctx, item["sub"], yb + 0.02 + sf["h"] / 2, sf, r["sub"], r["hl"], ctx.bfont, **{"in": ctx.body_in, "start": 0.7}))
         if ctx.cta:
             bw = 0.56 if not land else 0.3
-            by = 0.8 if not land else 0.82
-            lf = fit(ctx.cta, ctx.hfont, bw * 0.82, ctx.W, ctx.H, 0.045, 0.024, 1, up)
-            layers.append({"type": "shape", "shape": "rounded", "x": 0.5 if not ctx.left else ctx.margin + bw / 2, "y": by, "w": bw,
-                           "h": 0.075 if not land else 0.11, "radius": 1, "color": r["btn"], "shadow": True, "in": "pop", "start": 0.9})
-            layers.append({"type": "text", "text": ctx.cta, "x": 0.5 if not ctx.left else ctx.margin + bw / 2, "y": by, "size": lf["size"],
+            lf = _fit(ctx, ctx.cta, ctx.hfont, bw * 0.82, ctx.W, ctx.H, 0.045, 0.03, 1, up)
+            bx = 0.5 if not ctx.left else ctx.margin + bw / 2
+            layers.append({"type": "shape", "shape": "rounded", "x": bx, "y": by, "w": bw, "h": bh_, "radius": 1,
+                           "color": r["btn"], "shadow": True, "in": "pop", "start": 0.9})
+            layers.append({"type": "text", "text": lf.get("text", ctx.cta), "x": bx, "y": by, "size": lf["size"],
                            "w": bw * 0.84, "color": r["btn_text"], "font": ctx.hfont, "upper": up, "in": "fade", "start": 1.1})
         if ctx.url:
-            uf = fit(ctx.url, ctx.bfont, 0.8, ctx.W, ctx.H, 0.04, 0.024, 1)
-            layers.append({"type": "text", "text": ctx.url, "x": 0.5 if not ctx.left else ctx.margin + uf["w"] / 2, "y": 0.9 if not land else 0.92,
-                           "size": uf["size"], "w": 0.8, "color": r["sub"], "font": ctx.bfont, "in": "fade", "start": 1.3,
-                           "align": "left" if ctx.left else "center"})
+            uf = _fit(ctx, ctx.url, ctx.bfont, 0.8, ctx.W, ctx.H, 0.04, 0.03, 1)
+            layers.append(dict({"type": "text", "text": uf.get("text", ctx.url), "x": 0.5, "y": url_y,
+                                "size": uf["size"], "w": 0.8, "color": r["sub"], "font": ctx.bfont, "in": "fade", "start": 1.3},
+                               **({"x": ctx.margin, "anchor": "left", "align": "left"} if ctx.left else {})))
     elif role == "quote":
-        qf = fit(text, "serif" if "serif" not in ctx.hfont else ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.075, 0.034, 7, False, 1.3, 0.5)
+        qf = _fit(ctx, text, "serif" if "serif" not in ctx.hfont else ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.075, 0.034, 7, False, 1.3, 0.5)
         layers.append({"type": "text", "text": "“", "x": ctx.x_for(0.1), "y": 0.24 if not land else 0.2, "size": 0.2, "color": r["hl"],
                        "font": "serif-bold", "in": "fade", "anim_dur": 0.8, "align": "left" if ctx.left else "center", "w": 0.3})
         layers.append(_text(ctx, text, cy0 + 0.02, qf, r["text"], r["hl"], "serif", **{"in": "slide-up", "start": 0.35, "anim_dur": 0.8, "line_height": 1.3, "shadow": bool(item.get("img"))}))
         if item.get("author"):
             layers.append(_bar(ctx, cy0 + 0.02 + qf["h"] / 2 + 0.04, r["hl"], 1.0, 0.1, 0.004))
-            af = fit(item["author"], ctx.bfont, 0.7, ctx.W, ctx.H, 0.04, 0.025, 2, upper=True)
+            af = _fit(ctx, item["author"], ctx.bfont, 0.7, ctx.W, ctx.H, 0.04, 0.025, 2, upper=True)
             layers.append(_text(ctx, item["author"], cy0 + 0.02 + qf["h"] / 2 + 0.09, af, r["sub"], r["hl"], ctx.bfont, **{"in": "fade", "start": 1.3, "upper": True}))
     else:  # hook / point
         is_hook = role == "hook"
-        head = fit(ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.13 if is_hook else 0.095, 0.045,
-                   5 if not land else 3, up)
-        sub_h = 0.0
+        numbered = item.get("num") is not None
+        chip = (0.13 if not land else 0.1) if numbered else 0.0
+        top = (0.18 if not land else 0.14) + (chip + 0.04 if numbered else (0.04 if (T["bar"] and not is_hook) else 0))
+        bottom = 0.84 if not land else 0.86
+        avail = bottom - top
+        has_sub = bool(item.get("sub"))
+        head = _fit(ctx, ltxt, ctx.hfont, ctx.wfrac, ctx.W, ctx.H, 0.13 if is_hook else 0.095, 0.045,
+                    5 if not land else 3, up, max_h=avail * (0.65 if has_sub else 1.0))
         sf = None
-        if item.get("sub"):
-            sf = fit(item["sub"], ctx.bfont, ctx.wfrac, ctx.W, ctx.H, 0.05, 0.028, 4, False, max_h=0.2)
-            sub_h = sf["h"] + 0.045
-        cy = cy0 - sub_h / 2
-        extra_top = 0.0
-        if item.get("num") is not None:
-            chip = 0.13 if not land else 0.1
-            cyc = cy - head["h"] / 2 - chip * ctx.W / ctx.H / 2 - 0.035 if not land else cy - head["h"] / 2 - 0.08
+        if has_sub:
+            sf = _fit(ctx, item["sub"], ctx.bfont, ctx.wfrac, ctx.W, ctx.H, 0.05, 0.028, 4, False,
+                      max_h=max(0.05, avail - head["h"] - 0.09))
+        bar_gap = 0.035 if (T["bar"] and is_hook) else 0.0
+        total = head["h"] + bar_gap + ((sf["h"] + 0.03) if sf else 0)
+        y0 = top + max(0.0, (avail - total) / 2)          # centre the whole stack in the free area
+        cy = y0 + head["h"] / 2
+        if numbered:
+            cyc = y0 - 0.03 - chip * (ctx.W / ctx.H) / 2 if not land else y0 - 0.075
             layers.append({"type": "shape", "shape": "circle", "x": ctx.x_for(chip), "y": round(cyc, 4), "w": chip, "color": r["hl"], "in": "pop", "anim_dur": 0.5})
-            nf = fit(str(item["num"]), ctx.hfont, chip * 0.8, ctx.W, ctx.H, 0.07, 0.03, 1)
+            nf = _fit(ctx, str(item["num"]), ctx.hfont, chip * 0.8, ctx.W, ctx.H, 0.07, 0.03, 1)
             layers.append({"type": "text", "text": str(item["num"]), "x": ctx.x_for(chip), "y": round(cyc, 4), "size": nf["size"], "w": chip * 0.9,
                            "color": _hex(best_text(_rgb(r["hl"]), B)), "font": ctx.hfont, "in": "fade", "start": 0.2})
         elif T["bar"] and not is_hook:
-            layers.append(_bar(ctx, cy - head["h"] / 2 - 0.035, r["hl"], 0.1, 0.1))
+            layers.append(_bar(ctx, y0 - 0.03, r["hl"], 0.1, 0.1))
         layers.append(_text(ctx, ltxt, cy, head, r["text"], r["hl"], ctx.hfont, **dict(kw_t, start=0.15, **push)))
-        yb = cy + head["h"] / 2
-        if T["bar"] and is_hook:
-            yb += 0.035
+        yb = y0 + head["h"]
+        if bar_gap:
+            yb += bar_gap
             layers.append(_bar(ctx, yb, r["hl"], 0.6))
         if sf:
-            layers.append(_text(ctx, item["sub"], yb + 0.02 + sf["h"] / 2 + (0.01 if T["bar"] and is_hook else 0), sf, r["sub"], r["hl"], ctx.bfont,
+            layers.append(_text(ctx, item["sub"], yb + 0.025 + sf["h"] / 2, sf, r["sub"], r["hl"], ctx.bfont,
                                 **{"in": ctx.body_in, "start": 0.8, "anim_dur": ctx.adur}))
 
     if role not in ("hook", "cta", "poster"):
@@ -489,6 +547,34 @@ def build_scene(ctx, i, item, role, bgkind, dur):
 
 
 # --------------------------------------------------------------------------- public API
+def _sanitize(ctx, plan, meta):
+    """Drop characters the chosen font cannot draw (emoji, missing letters) instead of exporting empty boxes."""
+    removed: set[str] = set()
+
+    def clean(txt, font):
+        if not txt:
+            return txt
+        miss = engine.missing_glyphs(engine.pick_font(font, 40, txt), txt)
+        if not miss:
+            return txt
+        removed.update(miss)
+        return re.sub(r"[ \t]{2,}", " ", "".join(c for c in txt if c not in miss)).strip()
+
+    for it, role in plan:
+        it["text"] = clean(it["text"], ctx.hfont)
+        it["sub"] = clean(it.get("sub"), ctx.bfont)
+        if it.get("author"):
+            it["author"] = clean(it["author"], ctx.bfont)
+    ctx.cta, ctx.url = clean(ctx.cta, ctx.hfont), clean(ctx.url, ctx.bfont)
+    if removed:
+        meta["warnings"].append("Removed characters the font cannot draw: " + " ".join(sorted(removed)[:10])
+                                + " (emoji are not supported; for other languages add a font in Brand > Fonts).")
+    kept = [(it, role) for it, role in plan if it["text"] or role == "cta"]
+    if not kept:
+        raise SpecError("After removing characters the font cannot draw there is no text left.")
+    return kept
+
+
 def _auto_duration(item, role):
     d = 1.4 + _words(item["text"] + " " + (item.get("sub") or "")) / 2.8
     return max(3.2 if role == "hook" else 2.6, min(7.0, d))
@@ -529,7 +615,7 @@ def generate(text, *, kind="video", theme=None, brand=None, size=(1080, 1920), c
         if poster["img"]:
             engine.asset_path(poster["img"])
         plan = [(poster, "poster")]
-        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, 1)
+        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, 1, rtl=engine.is_rtl(text))
     else:
         plan = []
         for n_, it in enumerate(items):
@@ -537,7 +623,8 @@ def generate(text, *, kind="video", theme=None, brand=None, size=(1080, 1920), c
             plan.append((it, role))
         if cta or url:
             plan.append(({"text": meta.get("cta_headline") or B["tagline"] or "", "img": None, "dur": 3.4, "num": None, "sub": None}, "cta"))
-        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, len(plan))
+        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, len(plan), rtl=engine.is_rtl(text))
+    plan = _sanitize(ctx, plan, meta)
     durs = [it["dur"] or (3.4 if role == "cta" else _auto_duration(it, role)) for it, role in plan]
     if target and len(plan) > 1:
         td = T["tdur"]
@@ -556,5 +643,6 @@ def generate(text, *, kind="video", theme=None, brand=None, size=(1080, 1920), c
     if music:
         engine.asset_path(music)
         spec["audio"] = {"asset": music, "volume": 0.7, "fade_out": 1.5}
+    meta["warnings"] += [w for w in dict.fromkeys(ctx.warnings)]
     meta.update({"theme": T["id"], "scenes": len(scenes), "role_list": [r for _, r in plan]})
     return spec, meta

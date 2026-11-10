@@ -1,0 +1,2889 @@
+{
+ "one_sentence|bold|image": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "one_sentence|bold|video": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.45
+  ]
+ },
+ "one_sentence|corporate|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "one_sentence|corporate|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.5
+  ]
+ },
+ "one_sentence|elegant|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.9
+  ]
+ },
+ "one_sentence|elegant|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.9
+  ]
+ },
+ "one_sentence|minimal|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.6
+  ]
+ },
+ "one_sentence|minimal|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.6
+  ]
+ },
+ "one_sentence|neon|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "one_sentence|neon|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.5
+  ]
+ },
+ "one_sentence|playful|image": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "one_sentence|playful|video": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   5.0,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.45
+  ]
+ },
+ "paragraph|bold|image": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "paragraph|bold|video": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.45
+  ]
+ },
+ "paragraph|corporate|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "paragraph|corporate|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.5
+  ]
+ },
+ "paragraph|elegant|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.9
+  ]
+ },
+ "paragraph|elegant|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.9
+  ]
+ },
+ "paragraph|minimal|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.6
+  ]
+ },
+ "paragraph|minimal|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.6
+  ]
+ },
+ "paragraph|neon|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "paragraph|neon|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.5
+  ]
+ },
+ "paragraph|playful|image": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "paragraph|playful|video": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#6d28d9",
+    "#441987"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.2,
+   7.0,
+   4.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.45
+  ]
+ },
+ "quote|bold|image": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "quote|bold|video": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.45
+  ]
+ },
+ "quote|corporate|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "quote|corporate|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.5
+  ]
+ },
+ "quote|elegant|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.9
+  ]
+ },
+ "quote|elegant|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.9
+  ]
+ },
+ "quote|minimal|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.6
+  ]
+ },
+ "quote|minimal|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.6
+  ]
+ },
+ "quote|neon|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "quote|neon|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.5
+  ]
+ },
+ "quote|playful|image": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "quote|playful|video": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.5,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "quote",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.45
+  ]
+ },
+ "script|bold|image": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "script|bold|video": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.45
+  ]
+ },
+ "script|corporate|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "script|corporate|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.5
+  ]
+ },
+ "script|elegant|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.9
+  ]
+ },
+ "script|elegant|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.9
+  ]
+ },
+ "script|minimal|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.6
+  ]
+ },
+ "script|minimal|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape"
+   ],
+   [
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "text:fade",
+    "text:slide-right"
+   ],
+   [
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.6
+  ]
+ },
+ "script|neon|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "script|neon|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.5
+  ]
+ },
+ "script|playful|image": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "script|playful|video": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#6d28d9",
+    "#441987"
+   ],
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.2,
+   3.5,
+   2.6,
+   2.8,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "point",
+   "point",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.45
+  ]
+ },
+ "subtitle|bold|image": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "subtitle|bold|video": {
+  "backgrounds": [
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#ff6a1a",
+    "#6d28d9"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:slide-left",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.45
+  ]
+ },
+ "subtitle|corporate|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "subtitle|corporate|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:slide-up"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-left",
+   0.5
+  ]
+ },
+ "subtitle|elegant|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:fade",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.9
+  ]
+ },
+ "subtitle|elegant|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:fade"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:fade",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.9
+  ]
+ },
+ "subtitle|minimal|image": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.6
+  ]
+ },
+ "subtitle|minimal|video": {
+  "backgrounds": [
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ],
+   [
+    "#f8fafc",
+    "#f9e9e1"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "text:slide-right",
+    "shape",
+    "text:slide-up"
+   ],
+   [
+    "shape",
+    "text:slide-right"
+   ],
+   [
+    "text:slide-right",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "fade",
+   0.6
+  ]
+ },
+ "subtitle|neon|image": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.5
+  ]
+ },
+ "subtitle|neon|video": {
+  "backgrounds": [
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ],
+   [
+    "#0f172a",
+    "#522e26"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:slide-up",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:zoom",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.5
+  ]
+ },
+ "subtitle|playful|image": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ]
+  ],
+  "durations": [
+   4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "text:slide-left",
+    "shape",
+    "text:fade",
+    "text:fade"
+   ]
+  ],
+  "roles": [
+   "poster"
+  ],
+  "transition": [
+   "none",
+   0.45
+  ]
+ },
+ "subtitle|playful|video": {
+  "backgrounds": [
+   [
+    "#fbbf24",
+    "#b08619"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ],
+   [
+    "#ff6a1a",
+    "#9e4210"
+   ]
+  ],
+  "durations": [
+   3.9,
+   2.6,
+   3.4
+  ],
+  "layers": [
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "text:slide-left",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ],
+   [
+    "shape",
+    "shape",
+    "text:pop",
+    "shape",
+    "text:fade",
+    "text:fade",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape",
+    "shape"
+   ]
+  ],
+  "roles": [
+   "hook",
+   "point",
+   "cta"
+  ],
+  "transition": [
+   "slide-up",
+   0.45
+  ]
+ }
+}

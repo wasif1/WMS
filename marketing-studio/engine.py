@@ -183,6 +183,71 @@ def _build_font_index() -> dict[str, str]:
         return _font_index
 
 
+_RTL_RE = re.compile("[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]")
+_SCRIPT_FONTS = {  # (detector, regular candidates, bold candidates) for scripts the Latin fonts lack
+    "arabic": (re.compile("[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]"),
+               ["NotoNaskhArabic-Regular.ttf", "NotoSansArabic-Regular.ttf", "Amiri-Regular.ttf", "NotoNastaliqUrdu-Regular.ttf", "Lateef.ttf", "DejaVuSans.ttf", "Tahoma.ttf", "arial.ttf", "FreeSerif.ttf"],
+               ["NotoNaskhArabic-Bold.ttf", "NotoSansArabic-Bold.ttf", "Amiri-Bold.ttf", "NotoNastaliqUrdu-Bold.ttf", "DejaVuSans-Bold.ttf", "Tahomabd.ttf", "arialbd.ttf", "FreeSerifBold.ttf"]),
+    "hebrew": (re.compile("[\u0590-\u05ff]"), ["DejaVuSans.ttf", "FreeSerif.ttf", "arial.ttf"], ["DejaVuSans-Bold.ttf", "FreeSerifBold.ttf", "arialbd.ttf"]),
+    "devanagari": (re.compile("[\u0900-\u097f]"), ["NotoSansDevanagari-Regular.ttf", "Mangal.ttf", "FreeSerif.ttf", "Lohit-Devanagari.ttf"],
+                   ["NotoSansDevanagari-Bold.ttf", "Mangalb.ttf", "FreeSerifBold.ttf", "Lohit-Devanagari.ttf"]),
+}
+
+
+def is_rtl(text: str) -> bool:
+    return bool(_RTL_RE.search(text or ""))
+
+
+def _glyph_sig(f, ch: str) -> bytes:
+    im = Image.new("L", (96, 96), 0)
+    ImageDraw.Draw(im).text((8, 8), ch, font=f, fill=255)
+    return im.tobytes()
+
+
+@lru_cache(maxsize=8192)
+def _has_glyph(path: str, ch: str) -> bool:
+    """True if the font really draws `ch` (differs from the font's own missing-glyph box and is not blank)."""
+    try:
+        f = ImageFont.truetype(path, 40)
+        sig = _glyph_sig(f, ch)
+        if not any(sig):
+            return False
+        return sig not in {_glyph_sig(f, bad) for bad in ("\uffff", "\U0010ffff", "\ufdd0")}
+    except Exception:
+        return True
+
+
+def missing_glyphs(font, text: str) -> set[str]:
+    """Characters in `text` that `font` cannot draw (shown as empty boxes). Spaces/newlines/markup ignored."""
+    path = getattr(font, "path", None)
+    if not path:
+        return set()
+    return {c for c in set(text) if not c.isspace() and c != "*" and not _has_glyph(str(path), c)}
+
+
+def pick_font(name: str, px: int, text: str):
+    """Font for this text: the requested one, or - for the built-in Latin aliases - a fallback that covers
+    Arabic/Urdu/Hebrew/Devanagari (first installed candidate that has every glyph; explicit font files are respected)."""
+    if name in _FONT_ALIASES:
+        idx = _build_font_index()
+        for rx, regular, bold in _SCRIPT_FONTS.values():
+            if rx.search(text):
+                need = {c for c in text if not c.isspace() and c != "*"}
+                best, best_miss = None, None
+                for cand in (bold if name.endswith("bold") else regular):
+                    path = idx.get(cand.lower())
+                    if not path:
+                        continue
+                    miss = sum(1 for c in need if not _has_glyph(path, c))
+                    if best is None or miss < best_miss:
+                        best, best_miss = cand, miss
+                    if miss == 0:
+                        break
+                if best:
+                    return get_font(best, px)
+    return get_font(name, px)
+
+
 def user_fonts() -> list[str]:
     if not FONTS.is_dir():
         return []
@@ -286,7 +351,7 @@ def _tokens(para):
 
 
 def _layout(text, font, maxw, probe):
-    """Greedy word wrap. Returns [(units, width)], a unit being tokens that must not be split."""
+    """Greedy word wrap. Returns [(units, width, rtl)], a unit being tokens that must not be split."""
     space_w = probe.textlength(" ", font=font)
     lines = []
     for para in text.split("\n"):
@@ -296,17 +361,33 @@ def _layout(text, font, maxw, probe):
                 units.append([t])
             else:
                 units[-1].append(t)
+        rtl = is_rtl(para)
+        if not rtl:  # a single word wider than the line is broken into pieces instead of running off the frame
+            wide = []
+            for u in units:
+                if len(u) == 1 and probe.textlength(u[0][0], font=font) > maxw:
+                    piece = ""
+                    for ch in u[0][0]:
+                        if piece and probe.textlength(piece + ch, font=font) > maxw:
+                            wide.append([[piece, u[0][1], True]])
+                            piece = ch
+                        else:
+                            piece += ch
+                    wide.append([[piece, u[0][1], True]])
+                else:
+                    wide.append(u)
+            units = wide
         cur, curw = [], 0.0
         for u in units:
             uw = sum(probe.textlength(t[0], font=font) for t in u)
             add = uw + (space_w if cur else 0)
             if cur and curw + add > maxw:
-                lines.append((cur, curw))
+                lines.append((cur, curw, rtl))
                 cur, curw = [u], uw
             else:
                 cur.append(u)
                 curw += add
-        lines.append((cur, curw))
+        lines.append((cur, curw, rtl))
     return lines
 
 
@@ -339,6 +420,10 @@ class SceneRenderer:
         self.dur = scene["duration"]
         self._bg = None
         self._sprites: dict[int, Image.Image | None] = {}
+        self._insets: dict[int, int] = {}
+        self._last_inset = 0
+        self.collect = False          # QA: record where each layer was drawn
+        self.boxes: list[dict] = []
 
     # ---- background
     def _build_bg(self):
@@ -399,8 +484,11 @@ class SceneRenderer:
     def _sprite(self, idx, L):
         if idx not in self._sprites:
             kind = L["type"]
+            self._last_inset = 0
             sp = {"text": self._text, "image": self._image, "shape": self._shape}[kind](L)
+            self._insets[idx] = self._last_inset
             if sp is not None and L.get("rotate"):
+                self._insets[idx] = 0
                 sp = sp.rotate(num(L["rotate"], 0, -360, 360, "rotate"), expand=True, resample=Image.BICUBIC)
             self._sprites[idx] = sp
         return self._sprites[idx]
@@ -414,7 +502,7 @@ class SceneRenderer:
         if not text.strip():
             return None
         px = max(8, int(num(L.get("size"), 0.07, 0.005, 1, "size") * m))
-        font = get_font(str(L.get("font", "sans-bold")), px)
+        font = pick_font(str(L.get("font", "sans-bold")), px, text)
         maxw = int(num(L.get("w"), 0.84, 0.05, 1, "w") * W)
         probe = ImageDraw.Draw(Image.new("L", (1, 1)))
         lines = _layout(text, font, maxw, probe)
@@ -423,7 +511,7 @@ class SceneRenderer:
         stroke = L.get("stroke") or {}
         sw = int(num(stroke.get("width"), 0, 0, 0.05, "stroke.width") * m)
         asc, desc = font.getmetrics()
-        block_w = max(w for _, w in lines)
+        block_w = max(ln[1] for ln in lines)
         tw = int(math.ceil(block_w)) + 2 * sw
         th = (len(lines) - 1) * step + asc + desc + 2 * sw
         space_w = probe.textlength(" ", font=font)
@@ -438,9 +526,20 @@ class SceneRenderer:
 
         def paint(img, dx, dy, col, acc, scol):
             d = ImageDraw.Draw(img)
-            for k, (units, lw) in enumerate(lines):
+            for k, (units, lw, rtl) in enumerate(lines):
                 x = ox + dx + {"left": 0, "center": (block_w - lw) / 2, "right": block_w - lw}[align]
                 y = oy + dy + k * step
+                if rtl:  # words run right-to-left; each word is shaped by raqm
+                    xr = x + lw
+                    for u in units:  # logical order: the first word is the rightmost
+                        uw = sum(probe.textlength(t[0], font=font) for t in u)
+                        xx = xr - uw
+                        for tok in u:
+                            d.text((xx, y), tok[0], font=font, fill=acc if tok[1] else col, anchor="la",
+                                   stroke_width=sw, stroke_fill=scol)
+                            xx += probe.textlength(tok[0], font=font)
+                        xr -= uw + space_w
+                    continue
                 for ui, u in enumerate(units):
                     if ui:
                         x += space_w
@@ -460,6 +559,7 @@ class SceneRenderer:
             paint(sh, off, off, dark, dark, dark)
             sprite = Image.alpha_composite(sprite, sh.filter(ImageFilter.GaussianBlur(max(1, px * 0.06))))
         paint(sprite, 0, 0, color, accent, parse_color(stroke.get("color", "#000000")))
+        self._last_inset = ox  # where the ink starts inside the sprite, so anchor "left" lines up with the ink
         return sprite
 
     def _image(self, L):
@@ -556,6 +656,7 @@ class SceneRenderer:
     # ---- compose
     def render(self, t: float) -> Image.Image:
         frame = self._bg_frame(t)
+        self.boxes = []
         W, H = self.W, self.H
         for idx, L in enumerate(self.scene.get("layers", [])):
             start = num(L.get("start"), 0, 0, 1e4, "start")
@@ -585,7 +686,21 @@ class SceneRenderer:
                 sp.putalpha(sp.getchannel("A").point([int(i * alpha) for i in range(256)]))
             cx = num(L.get("x"), 0.5, -2, 3, "x") * W + dx
             cy = num(L.get("y"), 0.5, -2, 3, "y") * H + dy
-            frame.paste(sp, (int(cx - full_w / 2), int(cy - sp.height / 2)), sp)
+            anchor = L.get("anchor", "center")
+            inset = self._insets.get(idx, 0)
+            if anchor == "left":      # x is the left edge of the ink (independent of how wide the text measures)
+                px0 = int(cx - inset)
+            elif anchor == "right":
+                px0 = int(cx - full_w + inset)
+            else:
+                px0 = int(cx - full_w / 2)
+            py0 = int(cy - sp.height / 2)
+            frame.paste(sp, (px0, py0), sp)
+            if self.collect:
+                ink = sp.getchannel("A").point(lambda v: 255 if v > 40 else 0).getbbox()
+                if ink:
+                    self.boxes.append({"idx": idx, "type": L["type"], "layer": L,
+                                       "box": (px0 + ink[0], py0 + ink[1], px0 + ink[2], py0 + ink[3])})
         return frame
 
     def poster_time(self) -> float:
@@ -690,7 +805,7 @@ def _out_name(spec_name, label, w, h, suffix, ext):
 
 def render_video(spec, out_path: Path, W, H, fps=None, fmt="mp4", progress=None, cancel=None, audio=True, quality="hd"):
     ff = ffmpeg_bin()
-    if not ff:
+    if not ff or not shutil.which(ff):
         raise SpecError("ffmpeg not found. Install it (see README) or set FFMPEG_BIN. Image export still works without it.")
     comp = Composer(spec, W, H)
     fps = int(num(fps, comp.spec["fps"], 1, 60, "fps"))

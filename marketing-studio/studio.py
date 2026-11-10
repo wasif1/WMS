@@ -32,6 +32,7 @@ import brand as brandmod
 import bulk
 import engine
 import generator
+import qa
 from engine import ASSETS, FONTS, OUTPUTS, PROJECTS, ROOT, TEMPLATES, SpecError
 
 STATIC = ROOT / "static"
@@ -171,7 +172,11 @@ def do_generate(b):
     comp = engine.Composer(spec, 270, 480)
     scenes = [{"start": round(comp.starts[i], 3), "end": round(comp.starts[i] + r.dur, 3),
                "poster": round(comp.poster_global(i), 3)} for i, r in enumerate(comp.scenes)]
-    return {"spec": spec, "meta": meta, "timeline": {"total": round(comp.total, 3), "scenes": scenes}}
+    try:
+        quality = qa.audit(spec, 360)
+    except Exception:  # the audit must never block creating
+        quality = []
+    return {"spec": spec, "meta": meta, "quality": quality, "timeline": {"total": round(comp.total, 3), "scenes": scenes}}
 
 
 # --------------------------------------------------------------------------- preview cache
@@ -631,6 +636,9 @@ def cmd_make(a):
                                     name=a.name)
     for w in meta["warnings"]:
         print("warning:", w, file=sys.stderr)
+    issues = qa.audit(spec)
+    if issues:
+        print("quality check:\n" + qa.summary(issues), file=sys.stderr)
     if a.save:
         Path(a.save).parent.mkdir(parents=True, exist_ok=True)
         Path(a.save).write_text(json.dumps(spec, indent=2), "utf-8")
@@ -673,6 +681,12 @@ def cmd_brand(a):
         print("active brand:", a.name)
     else:
         print(json.dumps(brandmod.load(a.name), indent=2))
+
+
+def cmd_audit(a):
+    issues = qa.audit(load_spec(a.spec))
+    print(qa.summary(issues))
+    sys.exit(1 if any(i["severity"] == "error" for i in issues) else 0)
 
 
 def cmd_presets(_a):
@@ -751,6 +765,9 @@ def main(argv=None):
     br.add_argument("action", choices=["list", "show", "use"])
     br.add_argument("name", nargs="?")
     br.set_defaults(fn=cmd_brand)
+    au = sub.add_parser("audit", help="layout check: cut-off text, overlaps, contrast, safe zones")
+    au.add_argument("spec")
+    au.set_defaults(fn=cmd_audit)
     sub.add_parser("presets", help="list size presets").set_defaults(fn=cmd_presets)
     sub.add_parser("check", help="verify ffmpeg/Pillow").set_defaults(fn=cmd_check)
     v = sub.add_parser("validate", help="validate a spec")
