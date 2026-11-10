@@ -271,6 +271,8 @@ def _measure(text, font_key, w_frac, W, H, size, upper, line_height):
     font = engine.pick_font(font_key, px, t)
     lines = engine._layout(t, font, int(w_frac * W), probe)
     bh = ((len(lines) - 1) * int(px * line_height) + sum(font.getmetrics())) / H
+    if any(ord(c) > 0x058F for c in t):   # Indic/Arabic marks extend past the font's reported metrics
+        bh *= 1.12
     bw = max(ln[1] for ln in lines)
     longest = max((probe.textlength(w.replace("*", ""), font=font) for w in t.split()), default=0)
     return lines, bh, bw, longest
@@ -480,7 +482,7 @@ def build_scene(ctx, i, item, role, bgkind, dur):
             layers.append(_bar(ctx, yb, r["hl"], 0.5))
             yb += 0.015
         if sf:
-            layers.append(_text(ctx, item["sub"], yb + 0.02 + sf["h"] / 2, sf, r["sub"], r["hl"], ctx.bfont, **{"in": ctx.body_in, "start": 0.7}))
+            layers.append(_text(ctx, item["sub"], yb + 0.028 + sf["h"] / 2, sf, r["sub"], r["hl"], ctx.bfont, **{"in": ctx.body_in, "start": 0.7}))
         if ctx.cta:
             bw = 0.56 if not land else 0.3
             lf = _fit(ctx, ctx.cta, ctx.hfont, bw * 0.82, ctx.W, ctx.H, 0.045, 0.03, 1, up)
