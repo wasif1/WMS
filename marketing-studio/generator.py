@@ -271,8 +271,6 @@ def _measure(text, font_key, w_frac, W, H, size, upper, line_height):
     font = engine.pick_font(font_key, px, t)
     lines = engine._layout(t, font, int(w_frac * W), probe)
     bh = ((len(lines) - 1) * int(px * line_height) + sum(font.getmetrics())) / H
-    if any(ord(c) > 0x058F for c in t):   # Indic/Arabic marks extend past the font's reported metrics
-        bh *= 1.12
     bw = max(ln[1] for ln in lines)
     longest = max((probe.textlength(w.replace("*", ""), font=font) for w in t.split()), default=0)
     return lines, bh, bw, longest
@@ -317,7 +315,7 @@ def _fit(ctx, text, *a, **k):
 
 # --------------------------------------------------------------------------- scene building
 class Ctx:
-    def __init__(self, W, H, B, T, kind, logo, cta, url, n_scenes, cta_headline=None, rtl=False):
+    def __init__(self, W, H, B, T, kind, logo, cta, url, n_scenes, cta_headline=None):
         self.W, self.H, self.B, self.T, self.kind = W, H, B, T, kind
         self.land = W > H * 1.15
         self.n, self.logo, self.cta, self.url, self.cta_headline = n_scenes, logo, cta, url, cta_headline
@@ -327,7 +325,7 @@ class Ctx:
         self.bfont = T["bfont"] if fb == "auto" else fb
         self.title_in, self.body_in, self.adur = ANIM_STYLES[T["anim"]]
         self.push, self.drift = MOTION[T["motion"]]
-        self.left = T["align"] == "left" and not rtl
+        self.left = T["align"] == "left"
         self.margin = 0.08 if not self.land else 0.07
         self.wfrac = 0.8 if not self.land else 0.7
         if self.left and self.title_in == "slide-up":
@@ -570,7 +568,7 @@ def _sanitize(ctx, plan, meta):
     ctx.cta, ctx.url = clean(ctx.cta, ctx.hfont), clean(ctx.url, ctx.bfont)
     if removed:
         meta["warnings"].append("Removed characters the font cannot draw: " + " ".join(sorted(removed)[:10])
-                                + " (emoji are not supported; for other languages add a font in Brand > Fonts).")
+                                + " (emoji are not supported).")
     kept = [(it, role) for it, role in plan if it["text"] or role == "cta"]
     if not kept:
         raise SpecError("After removing characters the font cannot draw there is no text left.")
@@ -617,7 +615,7 @@ def generate(text, *, kind="video", theme=None, brand=None, size=(1080, 1920), c
         if poster["img"]:
             engine.asset_path(poster["img"])
         plan = [(poster, "poster")]
-        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, 1, rtl=engine.is_rtl(text))
+        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, 1)
     else:
         plan = []
         for n_, it in enumerate(items):
@@ -625,7 +623,7 @@ def generate(text, *, kind="video", theme=None, brand=None, size=(1080, 1920), c
             plan.append((it, role))
         if cta or url:
             plan.append(({"text": meta.get("cta_headline") or B["tagline"] or "", "img": None, "dur": 3.4, "num": None, "sub": None}, "cta"))
-        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, len(plan), rtl=engine.is_rtl(text))
+        ctx = Ctx(W, H, B, T, kind, logo_name, cta, url, len(plan))
     plan = _sanitize(ctx, plan, meta)
     durs = [it["dur"] or (3.4 if role == "cta" else _auto_duration(it, role)) for it, role in plan]
     if target and len(plan) > 1:

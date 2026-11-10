@@ -187,7 +187,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:12.5px}
       <div class="themes" id="bThemes"></div>
       <div id="bThemeOpts" style="margin-top:12px"></div></div>
     <div style="display:flex;gap:8px"><button class="btn pri" style="flex:1" id="bSave">Save brand</button><button class="btn" id="bDel">Delete</button></div>
-    <div class="err" id="bErr"></div>
+    <div class="err" id="bErr"></div><div id="bOk" style="color:var(--ok);font-weight:600;min-height:18px;margin-top:6px"></div>
   </div>
   <div class="sticky"><div class="card"><h2>Live preview</h2><p class="hint">Sample content rendered with the settings on the left (unsaved changes included).</p>
     <div class="pv3" id="bPrev"></div></div></div>
@@ -514,7 +514,7 @@ $('#bNew').onclick = () => { const n = prompt('Name for the new brand profile (e
 $('#bSave').onclick = async () => {
   try { const r = await put('/api/brands/' + encodeURIComponent(B.name.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-|-$/g, '') || 'brand'), B);
     await post('/api/brands/active', { name: r.saved }); await loadBrandList(r.saved); info.brand = B; bName = r.saved; drawThemes(); gen();
-    $('#bErr').style.color = 'var(--ok)'; $('#bErr').textContent = `Saved "${r.saved}" and set it as the active brand.`; setTimeout(() => { $('#bErr').style.color = ''; $('#bErr').textContent = ''; }, 3500); }
+    $('#bErr').textContent = ''; $('#bOk').textContent = `Saved "${r.saved}" and set it as the active brand.`; setTimeout(() => { $('#bOk').textContent = ''; }, 4000); }
   catch (e) { $('#bErr').textContent = e.message; }
 };
 $('#bDel').onclick = async () => { if (!bName || !confirm(`Delete brand "${bName}"?`)) return; await api('/api/brands/' + encodeURIComponent(bName), { method: 'DELETE' }); await loadBrandList(); const l = (await api('/api/brands')).brands; if (l.length) await openBrand(l[0], true); else { B = (await api('/api/brands/default')).brand; bName = null; drawBrand(); } };

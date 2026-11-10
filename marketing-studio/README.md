@@ -85,19 +85,17 @@ Reels/Stories/TikTok UI zones (9:16), tiny type, and characters the font cannot 
 text or URLs are shortened with an ellipsis (with a notice) instead of shrinking to unreadable size, and unsupported emoji are
 removed with a warning rather than exported as empty boxes.
 
-**Languages:** Latin, Arabic/Urdu (right-to-left, shaped), Hebrew and Devanagari/Hindi work. For Arabic-script text the app
-picks the first installed font that covers every character; for the nicest Urdu add a Nastaliq font (e.g. Noto Nastaliq Urdu)
-in Brand > Fonts. Emoji are not supported.
+**Language:** English (Latin text). Anything the font cannot draw is flagged, and emoji are not supported.
 
 ## Testing
 ```bash
 python -m unittest discover -s tests              # ~1 minute: unit + regression (golden images, snapshots, layout audit)
 MS_FULL_QA=1 python -m unittest discover -s tests # + exhaustive matrix: 12 scripts x 6 themes x 6 sizes x video/image
-python studio.py serve --no-browser --quiet &  node tests/e2e_ui.js   # browser end-to-end (needs node + playwright)
+python studio.py serve --no-browser --quiet &  node tests/e2e_ui.cjs   # browser end-to-end (needs node + playwright)
 python tests/update_golden.py                     # only after you looked at a visual change and approve it
 ```
 What is covered: every entrance/exit animation and its direction, easing, motion/push-in, opacity/rotate, shape effects (blur glow,
-shadow, stroke, anti-aliasing), text (wrap, align, anchor, highlight, box, stroke, shadow, long words, RTL), backgrounds (gradient angles,
+shadow, stroke, anti-aliasing), text (wrap, align, anchor, highlight, box, stroke, shadow, long words), backgrounds (gradient angles,
 drift, vignette, photo zoom/dim/focus), every transition (fade, slide-left, slide-up, hard cut) on exact pixels, timeline maths,
 real MP4/GIF/PNG/JPG exports measured with ffprobe (codec, profile, frame count, faststart, audio mux/loop/fade, quality ladder, cancel),
 the API (security, jobs, library, bulk), and one named test for every bug found during QA.

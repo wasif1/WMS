@@ -1,7 +1,7 @@
 // Browser end-to-end regression test for the whole app.
 // Needs: node + playwright (npm i playwright) and the server running:
 //   python studio.py serve --no-browser --port 8765 --quiet &
-//   node tests/e2e_ui.js [http://127.0.0.1:8765]
+//   node tests/e2e_ui.cjs [http://127.0.0.1:8765]
 // Exits non-zero on the first failed expectation. Removes everything it creates.
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://127.0.0.1:8765';
@@ -67,7 +67,8 @@ const ok = (cond, msg) => {
   await wait(2000);
   ok(await page.$eval('#bPrev img', (i, f) => i.src !== f, first), 'changing a colour updates the preview');
   await page.fill('#bName', 'E2E Brand'); await page.fill('#bCta', 'Join now'); await page.click('#bSave'); await wait(1200);
-  ok((await page.textContent('#bErr')).includes('Saved'), 'brand saved');
+  await wait(1500);   // the notice must survive the live-preview refresh
+  ok((await page.textContent('#bOk')).includes('Saved'), 'brand saved notice stays visible');
   const brands = await api('/api/brands');
   ok(brands.brands.includes('E2E-Brand') && brands.active === 'E2E-Brand', 'brand profile active on the server');
 
@@ -84,10 +85,10 @@ const ok = (cond, msg) => {
   await page.click('#bulkBtn'); await page.waitForSelector('#bJobs a.link', { timeout: 120000 });
   ok((await page.textContent('#bJobs')).includes('2 files ready'), 'bulk renders 2 files');
   ok((await page.textContent('#bJobs')).includes('Row 4'), 'the empty row is skipped and reported');
-  ok(await page.$('#bJobs a[href$=".zip"]') !== null, 'bulk offers a zip');
+  ok((await page.textContent('#bJobs')).includes('Download all (.zip)'), 'bulk offers a zip');
 
   console.log('Advanced editor hand-off');
-  await page.click('nav button[data-tab=create]'); await page.fill('#text', 'Editor hand-off *check*\nSecond scene'); await wait(1800);
+  await page.click('nav button[data-tab=create]'); await page.click('#kindSeg button[data-k=video]'); await page.fill('#text', 'Editor hand-off *check*\nSecond scene'); await wait(1800);
   const [pop] = await Promise.all([page.waitForEvent('popup'), page.click('#toEditor')]); await pop.waitForTimeout(2500);
   ok((await pop.$$('#sceneList .item')).length >= 2, 'editor opens the generated project');
   await pop.close();

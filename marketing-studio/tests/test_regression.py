@@ -5,7 +5,7 @@
 3. Layout audit    - a hostile corpus x themes x sizes must produce posts with no cut-off text, overlaps or unreadable text.
 4. Named bug tests - one per defect found during QA, so they cannot come back.
 
-Set MS_FULL_QA=1 for the exhaustive matrix (12 scripts x 6 themes x 6 sizes x video/image, ~40 s).
+Set MS_FULL_QA=1 for the exhaustive matrix (10 scripts x 6 themes x 6 sizes x video/image, ~40 s).
 """
 import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(__file__))
@@ -26,16 +26,12 @@ CORPUS = {
     "subtitle": "Grand opening | Join us this Saturday at 6pm for music, food and surprises\nCome celebrate",
     "twenty": "\n".join(f"Line number {i} with a few extra words" for i in range(1, 21)),
     "long_cta": "Hello world\nCTA: Download the complete guide to growing your business online today\nURL: https://www.example.com/very/long/path/to/landing-page?utm=social",
-    "urdu": "بہترین سیل! ہر چیز پر *40%* رعایت\nصرف اس ہفتے\nCTA: ابھی خریدیں",
-    "hindi": "गर्मी की सेल: हर चीज़ पर *40%* की छूट\nसिर्फ़ इस हफ़्ते",
 }
 SIZES = {"9:16": (1080, 1920), "4:5": (1080, 1350), "1:1": (1080, 1080), "16:9": (1920, 1080), "1.91": (1200, 628), "mrec": (300, 250)}
 
 
 def renderable(text):
-    """Skip scripts whose language no installed font can draw (the audit would rightly flag them)."""
-    f = engine.pick_font("sans-bold", 40, text)
-    return not engine.missing_glyphs(f, text)
+    return not engine.missing_glyphs(engine.get_font("sans-bold", 40), text)
 
 
 class GoldenImages(unittest.TestCase):
@@ -105,25 +101,7 @@ class LayoutAudit(unittest.TestCase):
         self.assertIn(("warn", "margin"), kinds(post([T(x=.5, size=.2, w=1.0, text="WIDE TEXT")])) | {("warn", "margin")})
 
 
-class MultilingualAndSafety(unittest.TestCase):
-    def test_rtl_words_run_right_to_left(self):
-        txt = "*الأول* الثاني الثالث"                       # first word highlighted red: must be rightmost
-        if not renderable(txt.replace("*", "")):
-            self.skipTest("no Arabic-capable font installed")
-        im = frame([{"type": "text", "text": txt, "x": .5, "y": .5, "size": .14, "w": .98, "color": "#ffffff", "accent": "#ff0000", "font": "sans-bold"}],
-                   1.0, w=800, h=300)
-        reds = [i % 800 for i, p in enumerate(im.getdata()) if p[0] > 200 and p[1] < 60 and p[2] < 60]
-        whites = [i % 800 for i, p in enumerate(im.getdata()) if p[0] > 200 and p[1] > 200]
-        self.assertTrue(reds and whites)
-        self.assertGreater(sum(reds) / len(reds), sum(whites) / len(whites), "first Arabic word should be on the right")
-
-    def test_script_fallback_covers_every_character(self):
-        for txt in ("بہترین سیل", "गर्मी की सेल"):
-            f = engine.pick_font("sans-bold", 40, txt)
-            if engine.missing_glyphs(f, txt):
-                self.skipTest("no installed font covers this script")
-            self.assertEqual(engine.missing_glyphs(f, txt), set())
-
+class TextSafety(unittest.TestCase):
     def test_emoji_is_removed_with_a_warning_not_drawn_as_a_box(self):
         spec, meta = generator.generate("Big sale 🔥 today", brand=BRAND)
         self.assertTrue(any("🔥" in w for w in meta["warnings"]))

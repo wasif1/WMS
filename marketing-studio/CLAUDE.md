@@ -33,7 +33,7 @@ python studio.py render|image projects/x.json -p reels -p square [-q hd] [--scen
 python studio.py validate projects/x.json
 python studio.py audit projects/x.json      # layout check (exit 1 on errors); `make` prints it automatically
 python -m unittest discover -s tests        # run after changing any .py file (MS_FULL_QA=1 for the exhaustive matrix)
-node tests/e2e_ui.js                        # browser end-to-end (server running); tests/update_golden.py only for approved visual changes
+node tests/e2e_ui.cjs                        # browser end-to-end (server running); tests/update_golden.py only for approved visual changes
 ```
 CSV columns (only `script` required): `name, script, theme, cta, url, image, music, kind`; extra columns
 usable as `{{column}}` in template mode (`templates/offer-card.json` is an example).

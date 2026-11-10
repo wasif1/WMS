@@ -69,7 +69,7 @@ def audit(spec: dict, max_edge: int = 480) -> list[dict]:
                 shown = "".join(sorted(miss))[:8]
                 emoji = any(ord(c) > 0x1F000 for c in miss)
                 add(i, "error", "glyphs", f"{_label(b)} contains characters the font cannot draw ({shown})"
-                    + ("; emoji are not supported, use shapes or images" if emoji else "; add a font that supports your language in Brand > Fonts"))
+                    + ("; emoji are not supported, use shapes or images" if emoji else "; use a font that includes them in Brand > Fonts"))
             bg = _mean_rgb(notext, b["box"])
             try:
                 fg = engine.parse_color(L.get("color", "#ffffff"))[:3]

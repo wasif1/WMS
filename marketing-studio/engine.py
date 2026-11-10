@@ -183,21 +183,6 @@ def _build_font_index() -> dict[str, str]:
         return _font_index
 
 
-_RTL_RE = re.compile("[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]")
-_SCRIPT_FONTS = {  # (detector, regular candidates, bold candidates) for scripts the Latin fonts lack
-    "arabic": (re.compile("[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]"),
-               ["NotoNaskhArabic-Regular.ttf", "NotoSansArabic-Regular.ttf", "Amiri-Regular.ttf", "NotoNastaliqUrdu-Regular.ttf", "Lateef.ttf", "DejaVuSans.ttf", "Tahoma.ttf", "arial.ttf", "FreeSerif.ttf"],
-               ["NotoNaskhArabic-Bold.ttf", "NotoSansArabic-Bold.ttf", "Amiri-Bold.ttf", "NotoNastaliqUrdu-Bold.ttf", "DejaVuSans-Bold.ttf", "Tahomabd.ttf", "arialbd.ttf", "FreeSerifBold.ttf"]),
-    "hebrew": (re.compile("[\u0590-\u05ff]"), ["DejaVuSans.ttf", "FreeSerif.ttf", "arial.ttf"], ["DejaVuSans-Bold.ttf", "FreeSerifBold.ttf", "arialbd.ttf"]),
-    "devanagari": (re.compile("[\u0900-\u097f]"), ["NotoSansDevanagari-Regular.ttf", "Mangal.ttf", "FreeSerif.ttf", "Lohit-Devanagari.ttf"],
-                   ["NotoSansDevanagari-Bold.ttf", "Mangalb.ttf", "FreeSerifBold.ttf", "Lohit-Devanagari.ttf"]),
-}
-
-
-def is_rtl(text: str) -> bool:
-    return bool(_RTL_RE.search(text or ""))
-
-
 def _glyph_sig(f, ch: str) -> bytes:
     im = Image.new("L", (96, 96), 0)
     ImageDraw.Draw(im).text((8, 8), ch, font=f, fill=255)
@@ -225,26 +210,8 @@ def missing_glyphs(font, text: str) -> set[str]:
     return {c for c in set(text) if not c.isspace() and c != "*" and not _has_glyph(str(path), c)}
 
 
-def pick_font(name: str, px: int, text: str):
-    """Font for this text: the requested one, or - for the built-in Latin aliases - a fallback that covers
-    Arabic/Urdu/Hebrew/Devanagari (first installed candidate that has every glyph; explicit font files are respected)."""
-    if name in _FONT_ALIASES:
-        idx = _build_font_index()
-        for rx, regular, bold in _SCRIPT_FONTS.values():
-            if rx.search(text):
-                need = {c for c in text if not c.isspace() and c != "*"}
-                best, best_miss = None, None
-                for cand in (bold if name.endswith("bold") else regular):
-                    path = idx.get(cand.lower())
-                    if not path:
-                        continue
-                    miss = sum(1 for c in need if not _has_glyph(path, c))
-                    if best is None or miss < best_miss:
-                        best, best_miss = cand, miss
-                    if miss == 0:
-                        break
-                if best:
-                    return get_font(best, px)
+def pick_font(name: str, px: int, text: str = ""):
+    """Font for a text layer (kept as one entry point so callers do not care how fonts are resolved)."""
     return get_font(name, px)
 
 
@@ -351,7 +318,7 @@ def _tokens(para):
 
 
 def _layout(text, font, maxw, probe):
-    """Greedy word wrap. Returns [(units, width, rtl)], a unit being tokens that must not be split."""
+    """Greedy word wrap. Returns [(units, width)], a unit being tokens that must not be split."""
     space_w = probe.textlength(" ", font=font)
     lines = []
     for para in text.split("\n"):
@@ -361,33 +328,31 @@ def _layout(text, font, maxw, probe):
                 units.append([t])
             else:
                 units[-1].append(t)
-        rtl = is_rtl(para)
-        if not rtl:  # a single word wider than the line is broken into pieces instead of running off the frame
-            wide = []
-            for u in units:
-                if len(u) == 1 and probe.textlength(u[0][0], font=font) > maxw:
-                    piece = ""
-                    for ch in u[0][0]:
-                        if piece and probe.textlength(piece + ch, font=font) > maxw:
-                            wide.append([[piece, u[0][1], True]])
-                            piece = ch
-                        else:
-                            piece += ch
-                    wide.append([[piece, u[0][1], True]])
-                else:
-                    wide.append(u)
-            units = wide
+        wide = []  # a single word wider than the line is broken into pieces instead of running off the frame
+        for u in units:
+            if len(u) == 1 and probe.textlength(u[0][0], font=font) > maxw:
+                piece = ""
+                for ch in u[0][0]:
+                    if piece and probe.textlength(piece + ch, font=font) > maxw:
+                        wide.append([[piece, u[0][1], True]])
+                        piece = ch
+                    else:
+                        piece += ch
+                wide.append([[piece, u[0][1], True]])
+            else:
+                wide.append(u)
+        units = wide
         cur, curw = [], 0.0
         for u in units:
             uw = sum(probe.textlength(t[0], font=font) for t in u)
             add = uw + (space_w if cur else 0)
             if cur and curw + add > maxw:
-                lines.append((cur, curw, rtl))
+                lines.append((cur, curw))
                 cur, curw = [u], uw
             else:
                 cur.append(u)
                 curw += add
-        lines.append((cur, curw, rtl))
+        lines.append((cur, curw))
     return lines
 
 
@@ -526,20 +491,9 @@ class SceneRenderer:
 
         def paint(img, dx, dy, col, acc, scol):
             d = ImageDraw.Draw(img)
-            for k, (units, lw, rtl) in enumerate(lines):
+            for k, (units, lw) in enumerate(lines):
                 x = ox + dx + {"left": 0, "center": (block_w - lw) / 2, "right": block_w - lw}[align]
                 y = oy + dy + k * step
-                if rtl:  # words run right-to-left; each word is shaped by raqm
-                    xr = x + lw
-                    for u in units:  # logical order: the first word is the rightmost
-                        uw = sum(probe.textlength(t[0], font=font) for t in u)
-                        xx = xr - uw
-                        for tok in u:
-                            d.text((xx, y), tok[0], font=font, fill=acc if tok[1] else col, anchor="la",
-                                   stroke_width=sw, stroke_fill=scol)
-                            xx += probe.textlength(tok[0], font=font)
-                        xr -= uw + space_w
-                    continue
                 for ui, u in enumerate(units):
                     if ui:
                         x += space_w
