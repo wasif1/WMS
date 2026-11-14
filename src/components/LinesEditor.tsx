@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { t, Trans } from '@/i18n'
-import { uomShort } from '@/i18n/labels'
+import { uomDecimals, uomShort, useUoms } from '@/lib/uoms'
 import type { Product, StockRow } from '@/lib/types'
 import { fmt } from '@/lib/utils'
 import { productLabel } from '@/lib/catalog'
@@ -12,6 +12,7 @@ export const toPayload = (ls: LineDraft[]) => ls.filter((l) => l.productId !== '
 
 /** Product / case-pack / loose-unit rows with live totals, weight and (optionally) available stock at the chosen location. */
 export default function LinesEditor({ lines, onChange, products, stock, checkStock = true, readOnlyProducts }: { lines: LineDraft[]; onChange: (l: LineDraft[]) => void; products: Product[]; stock?: StockRow[]; checkStock?: boolean; readOnlyProducts?: boolean }) {
+  useUoms() // unit decimal rules / names stay fresh
   const byId = new Map(products.map((p) => [p.id, p]))
   const set = (i: number, patch: Partial<LineDraft>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)))
   const avail = (id: number | '') => (id === '' ? undefined : stock?.find((s) => s.productId === id)?.available ?? 0)
@@ -33,8 +34,8 @@ export default function LinesEditor({ lines, onChange, products, stock, checkSto
               {p && <p className="mt-1 text-xs text-slate-500">{p.caseSize ? t('Case pack {n}', { n: p.caseSize }) : t("No case pack (loose)")} · {uomShort(p.uom)}{a !== undefined && stock ? <> · <span className={over ? 'font-medium text-red-600' : ''}><Trans k="available here: {n}" vars={{ n: fmt(a) }} /></span></> : null}</p>}
             </div>
             <input className="input col-span-4 sm:col-span-2" type="number" min={0} step={1} disabled={!!p && !p.caseSize} title={p && !p.caseSize ? t("This product has no case pack") : undefined} value={l.cases || ''} placeholder="0" onChange={(e) => set(i, { cases: Number(e.target.value) })} aria-label={t("Cases")} />
-            <input className="input col-span-4 sm:col-span-2" type="number" min={0} step={p?.uom === 'kg' || p?.uom === 'm' ? 0.001 : 1} value={l.loose || ''} placeholder="0" onChange={(e) => set(i, { loose: Number(e.target.value) })} aria-label={t("Loose units")} />
-            <div className="col-span-3 pt-2 text-end text-sm font-semibold sm:col-span-2">{fmt(q)}{p?.uom === 'kg' || p?.uom === 'm' ? ` ${uomShort(p.uom)}` : ''}</div>
+            <input className="input col-span-4 sm:col-span-2" type="number" min={0} step={p && uomDecimals(p.uom) ? 0.001 : 1} value={l.loose || ''} placeholder="0" onChange={(e) => set(i, { loose: Number(e.target.value) })} aria-label={t("Loose units")} />
+            <div className="col-span-3 pt-2 text-end text-sm font-semibold sm:col-span-2">{fmt(q)}{p && uomDecimals(p.uom) ? ` ${uomShort(p.uom)}` : ''}</div>
             <button type="button" className="btn-ghost col-span-1 !p-2 text-slate-400 hover:text-red-600" onClick={() => onChange(lines.filter((_, j) => j !== i))} aria-label={t("Remove line")}><Trash2 className="h-4 w-4" /></button>
           </div>
         )

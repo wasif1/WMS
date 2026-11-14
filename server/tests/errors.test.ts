@@ -27,7 +27,7 @@ describe('validation errors are plain language, name the field and list every pr
   })
   it('invalid choice, bad email, unexpected field, nested line numbers', async () => {
     const { o, db } = await owner()
-    expect((await o.call('post', '/api/products', { uom: 'gallon' })).body.error).toMatch(/Measured by must be one of: unit, kg, m, bundle/)
+    expect((await o.call('post', '/api/products', { uom: 'gallon' })).body.error).toMatch(/"gallon" is not a unit of measure you can use/)
     expect((await o.call('post', '/api/users', { name: 'N', email: 'not-an-email', role: 'user', permissions: [] })).body.error).toBe('Email must be a valid email address.')
     expect((await o.call('post', '/api/products', { name: 'x', hacker: 1 })).body.error).toMatch(/contains fields that are not allowed \(hacker\)/)
     const loc = (await o.call('post', '/api/locations', { name: 'W' })).body

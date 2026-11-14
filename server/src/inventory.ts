@@ -1,3 +1,4 @@
+import { uomOf } from './uoms.js'
 import type { Db } from './db.js'
 import { T, statusWord } from './i18n/index.js'
 import type { Line, Movement, Product, Stock } from './models.js'
@@ -63,7 +64,7 @@ export class Inventory {
       if (cases > 0 && !p.caseSize) throw bad(T("{product} has no case pack, so enter the amount under \"Loose units\" instead of cases.", { product: productLabel(p) }))
       const qty = r3(cases * (p.caseSize ?? 0) + loose)
       if (qty < 0 || (qty === 0 && !allowZero)) throw bad(T("Enter a quantity greater than zero for {product}.", { product: productLabel(p) }))
-      if ((p.uom === 'unit' || p.uom === 'bundle') && (!Number.isInteger(qty) || !Number.isInteger(cases))) throw bad(T("{product} is counted in whole numbers - remove the decimals.", { product: productLabel(p) }))
+      if (!(uomOf(this.db, p.uom)?.decimals ?? false) && (!Number.isInteger(qty) || !Number.isInteger(cases))) throw bad(T("{product} is counted in whole numbers - remove the decimals.", { product: productLabel(p) }))
       return { productId: p.id, cases, loose, qty }
     })
   }

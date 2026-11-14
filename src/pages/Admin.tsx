@@ -6,6 +6,7 @@ import { Badge, Card, Empty, ErrorBox, Field, PageHeader, PageLoader, Spinner, T
 import { get, post, put } from '@/lib/api'
 import { useAction } from '@/lib/hooks'
 import { fmtDate } from '@/lib/utils'
+import UomManager from './UomManager'
 
 const SCHEDULES: Record<string, string> = { '0 2 * * 0': ts('Weekly - Sundays at 02:00'), '0 2 1 * *': ts('Monthly - 1st at 02:00'), '0 2 * * *': ts('Daily at 02:00') }
 const human = (cron: string) => (SCHEDULES[cron] ? t(SCHEDULES[cron]) : cron)
@@ -40,6 +41,7 @@ export default function Admin() {
             <ErrorBox error={save.error} /><button className="btn-secondary" disabled={save.isPending} onClick={() => save.mutate(undefined)}>{t("Save")}</button></Card>
         </div>
       </div>
+      <UomManager />
       <h2 className="mb-3 mt-8 text-sm font-semibold">{t("Recent emails")} {!s.smtpConfigured && <span className="font-normal text-amber-600">{t("(SMTP not configured - messages are only stored here, not sent)")}</span>}</h2>
       <Table head={[t("When"), t("To"), t("Subject"), t("Status")]} empty={!outbox.data?.length && <Empty>{t("No emails yet.")}</Empty>}>{outbox.data?.slice(0, 20).map((m) => <tr key={m.id}><td className="td whitespace-nowrap text-slate-600">{fmtDate(m.at)}</td><td className="td text-xs">{m.to.join(', ')}</td><td className="td">{m.subject}</td><td className="td"><Badge tone={m.status === 'sent' ? 'green' : m.status === 'failed' ? 'red' : 'amber'}>{m.status.replace('_', ' ')}</Badge></td></tr>)}</Table>
     </>

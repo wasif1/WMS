@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUoms } from '@/lib/uoms'
 import { moveLabel, uomShort } from '@/i18n/labels'
 import { movementRef } from '@/i18n/describe'
 import { t, ts } from '@/i18n'
@@ -20,6 +21,7 @@ interface Overview {
 }
 
 export default function ProductDetail() {
+  useUoms() // keep unit names / decimal rules fresh after the super admin changes them
   const { id } = useParams()
   return <ProductOverview id={id} />
 }

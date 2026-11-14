@@ -2,13 +2,14 @@ import { Router } from 'express'
 import { T, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
-import { hasPerm, requirePerm } from '../auth.js'
+import { hasPerm, requirePerm, requireSuper } from '../auth.js'
 import { blindIndex } from '../crypto.js'
-import { AppError, forbidden, notFound } from '../errors.js'
+import { AppError, bad, forbidden, notFound } from '../errors.js'
 import { ip, nowIso, wrap } from '../http.js'
 import type { Actor, Client, Location, Product, User } from '../models.js'
 import { idParam, optStr, parse, str } from '../validation.js'
 import { isApproved } from '../catalog.js'
+import { customUoms, listUoms, saveCustomUoms, uomKey, uomOf } from '../uoms.js'
 
 const alnum = (s: string, n: number) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, n)
 
@@ -27,7 +28,7 @@ const opt = (max: number) => z.string().trim().max(max).optional().transform((v)
 const productShape = {
   name: opt(150), description: opt(1000), color: opt(40), size: opt(40), weight: opt(40),
   caseSize: z.number().int().positive().max(1_000_000).nullish().transform((v) => v ?? undefined),
-  uom: z.enum(['unit', 'kg', 'm', 'bundle']),
+  uom: z.string().trim().min(1).max(40), // checked against the built-in + super-admin units in the handler
   reorderLevel: z.number().nonnegative().max(1e9),
 }
 // create: sensible defaults for what is left out. update: NO defaults, so an edit never resets fields it did not send.
@@ -76,8 +77,46 @@ export function masterRoutes(ctx: Ctx) {
   const prodView = requirePerm('products.view', 'products.create', 'inbound.create', 'inbound.view', 'transfers.create', 'reserves.create', 'outbound.create', 'adjustments.create', 'adjustments.view', 'audits.view', 'reports.inventory', 'reports.orders', 'dashboard.view')
   // Pending / rejected products are NOT visible in the Products list until the owner approves them.
   r.get('/products', prodView, wrap((_req, res) => res.json((ctx.db.products.all() as Product[]).filter(isApproved))))
+  const checkUom = (key?: string) => { if (key !== undefined && !uomOf(ctx.db, key)) throw bad(T('"{unit}" is not a unit of measure you can use. Pick one from the list, or ask the super admin to add it.', { unit: key }), 'bad_uom') }
+
+  // ---- Units of measure (built-in + added by the super admin) ----------------------------------
+  const uomSchema = z.object({ name: str(40), short: str(12), decimals: z.boolean().default(false) }).strict()
+  const uomEditSchema = z.object({ name: str(40), short: str(12) }).strict()
+  const sameName = (name: string, exceptKey?: string) => listUoms(ctx.db).some((u) => u.key !== exceptKey && u.label.toLowerCase() === name.toLowerCase())
+  r.get('/uoms', prodView, wrap((_req, res) => res.json(listUoms(ctx.db))))
+  r.post('/uoms', requireSuper, wrap((req, res) => {
+    const b = parse(uomSchema, req.body)
+    if (sameName(b.name)) throw bad(T('A unit called "{name}" already exists.', { name: b.name }), 'duplicate')
+    const u = { key: uomKey(ctx.db, b.name), label: b.name, short: b.short, decimals: b.decimals }
+    saveCustomUoms(ctx.db, [...customUoms(ctx.db), u])
+    ctx.audit.log(req.user!, 'uom.create', { entity: 'uom', detail: u.label, ip: ip(req) })
+    res.status(201).json({ ...u, builtin: false })
+  }))
+  r.put('/uoms/:key', requireSuper, wrap((req, res) => {
+    const key = String(req.params.key); const cur = uomOf(ctx.db, key)
+    if (!cur) throw notFound('Unit')
+    if (cur.builtin) throw bad(T('The built-in units cannot be changed or deleted.'), 'builtin')
+    const b = parse(uomEditSchema, req.body)
+    if (sameName(b.name, key)) throw bad(T('A unit called "{name}" already exists.', { name: b.name }), 'duplicate')
+    // "allow decimals" is fixed once created: changing it could make existing stock quantities invalid
+    saveCustomUoms(ctx.db, customUoms(ctx.db).map((x) => (x.key === key ? { ...x, label: b.name, short: b.short } : x)))
+    ctx.audit.log(req.user!, 'uom.update', { entity: 'uom', detail: b.name, ip: ip(req) })
+    res.json({ ...cur, label: b.name, short: b.short })
+  }))
+  r.delete('/uoms/:key', requireSuper, wrap((req, res) => {
+    const key = String(req.params.key); const cur = uomOf(ctx.db, key)
+    if (!cur) throw notFound('Unit')
+    if (cur.builtin) throw bad(T('The built-in units cannot be changed or deleted.'), 'builtin')
+    const used = (ctx.db.products.all() as Product[]).filter((p) => p.uom === key).length
+    if (used) throw bad(T('"{unit}" is used by {n} product(s), so it cannot be deleted. Change those products to another unit first.', { unit: cur.label, n: used }), 'in_use')
+    saveCustomUoms(ctx.db, customUoms(ctx.db).filter((u) => u.key !== key))
+    ctx.audit.log(req.user!, 'uom.delete', { entity: 'uom', detail: cur.label, ip: ip(req) })
+    res.status(204).end()
+  }))
+
   r.post('/products', requirePerm('products.create'), wrap((req, res) => {
     const b = parse(productSchema, req.body)
+    checkUom(b.uom)
     const sku = skuFor(ctx, b)
     const p = ctx.db.products.insert({ ...b, sku, active: true, createdAt: nowIso(), ...submission(req.user!) }, { sku_idx: blindIndex(sku, 'sku') }) as Product
     ctx.audit.log(req.user!, p.status === 'approved' ? 'product.create' : 'product.request', { entity: 'product', entityId: p.id, detail: sku, ip: ip(req) })
@@ -87,6 +126,7 @@ export function masterRoutes(ctx: Ctx) {
     const id = idParam(req); const p = ctx.db.products.get(id) as Product | undefined
     if (!p || !isApproved(p)) throw notFound('Product')
     const b = parse(productUpdateSchema, req.body)
+    if (b.uom !== undefined && b.uom !== p.uom) checkUom(b.uom)
     const next = { ...p, ...b, sku: p.sku }
     if (b.caseSize === undefined && 'caseSize' in (req.body ?? {})) delete next.caseSize // explicit null clears it
     ctx.db.products.update(id, next, { sku_idx: blindIndex(p.sku, 'sku') })

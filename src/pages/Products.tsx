@@ -9,7 +9,8 @@ import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, 
 import { post, put } from '@/lib/api'
 import { useSimple } from '@/lib/simple'
 import { useAction, useProducts } from '@/lib/hooks'
-import { UOM_LABEL, variationOf } from '@/lib/catalog'
+import { variationOf } from '@/lib/catalog'
+import { BUILTIN_UOMS, uomLabel, useUoms } from '@/lib/uoms'
 import type { Product } from '@/lib/types'
 
 interface FormVals { name: string; description: string; color: string; size: string; weight: string; caseSize: string; uom: Product['uom']; reorderLevel: string }
@@ -53,6 +54,7 @@ export function ProductForm({ product, owner, onClose }: { product?: Product; ow
     defaultValues: { name: product?.name ?? '', description: product?.description ?? '', color: product?.color ?? '', size: product?.size ?? '', weight: product?.weight ?? '', caseSize: product?.caseSize?.toString() ?? '', uom: product?.uom ?? 'unit', reorderLevel: product?.reorderLevel?.toString() ?? '' },
   })
   const [active, setActive] = useState(product?.active ?? true)
+  const uoms = useUoms()
   const uom = watch('uom')
   const save = useAction((v: FormVals) => {
     const body = { name: v.name, description: v.description, color: v.color, size: v.size, weight: v.weight, caseSize: num(v.caseSize) ?? null, uom: v.uom, reorderLevel: num(v.reorderLevel) ?? 0 }
@@ -71,7 +73,7 @@ export function ProductForm({ product, owner, onClose }: { product?: Product; ow
         <Field label={t("Colour")} hint={t("Part of the variation, used in the SKU")}><input className="input" {...register('color')} /></Field>
         <Field label={t("Size")} hint={t("Part of the variation, used in the SKU")}><input className="input" {...register('size')} /></Field>
         <Field label={t("Weight")} hint={t("e.g. 500 g, 1.5 kg - entered once")}><input className="input" {...register('weight')} /></Field>
-        <Field label={t("Measured by")} hint={t("How this product is counted")}><select className="input" {...register('uom')}>{Object.entries(UOM_LABEL).map(([k, l]) => <option key={k} value={k}>{t(l)}</option>)}</select></Field>
+        <Field label={t("Measured by")} hint={t("How this product is counted")}><select className="input" {...register('uom')}>{(uoms.data ?? BUILTIN_UOMS).map((u) => <option key={u.key} value={u.key}>{uomLabel(u.key)}</option>)}</select></Field>
         <Field label={t("Case pack (units per box)")} hint={t("Leave empty for products that arrive loose")}><input className="input" type="number" min={1} step={1} {...register('caseSize')} /></Field>
         <Field label={t("Reorder level")} hint={uom === 'unit' ? t("Optional") : t('Optional, in {unit}', { unit: uomShort(uom) })}><input className="input" type="number" min={0} {...register('reorderLevel')} /></Field>
         {product && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />{t("Active")}</label>}

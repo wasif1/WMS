@@ -15,8 +15,7 @@ export const moveLabel = (type: string) => t(MOVE[type] ?? type)
 const ORDER_TYPE: Record<string, string> = { inbound: ts('Inbound'), transfer: ts('Transfer'), reserve: ts('Reserve'), outbound: ts('Outbound') }
 export const orderTypeLabel = (x: string) => t(ORDER_TYPE[x] ?? x)
 
-const UOM: Record<string, string> = { unit: ts('units'), kg: ts('kg'), m: ts('m'), bundle: ts('bundles') }
-export const uomShort = (u: string) => t(UOM[u] ?? u)
+export { uomShort } from '@/lib/uoms'
 
 /** Activity-log action codes -> readable words (unknown codes are shown as-is). */
 const ACTION: Record<string, string> = {

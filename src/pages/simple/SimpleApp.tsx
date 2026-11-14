@@ -1,4 +1,5 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { useUoms } from '@/lib/uoms'
 import { t } from '@/i18n'
 import LanguageToggle from '@/components/LanguageToggle'
 import { ArrowLeft, LogOut, PackageCheck, Type, UserCircle } from 'lucide-react'
@@ -11,6 +12,7 @@ import SimpleHome from './SimpleHome'
 
 /** One page, no side menu. The header has only the few things a staff member needs. */
 export default function SimpleApp({ gated }: { gated: boolean }) {
+  useUoms() // keep unit names / decimal rules fresh after the super admin changes them
   const { user, logout } = useAuth()
   const size = useTextSize()
   return (

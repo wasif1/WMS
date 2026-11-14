@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUoms } from '@/lib/uoms'
 import { t, ts } from '@/i18n'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import ErrorBoundary from './ErrorBoundary'
@@ -39,6 +40,7 @@ const groups: { title: string; items: Item[] }[] = [
 ]
 
 export default function Layout() {
+  useUoms() // keep unit names / decimal rules fresh after the super admin changes them
   const { user, can, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const loc = useLocation()

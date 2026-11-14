@@ -5,6 +5,7 @@
  */
 import { ALL_KEYS, PERMISSIONS } from '../../server/src/permissions'
 import { ApiError } from './api'
+import { BUILTIN_UOMS } from './uomList'
 import { T, list, render, statusWord, type Msg } from '../../server/src/i18n/index'
 import { getLang, t } from '@/i18n'
 
@@ -97,6 +98,7 @@ function build(input: A[], zero = false) {
     if ((l.cases ?? 0) > 0 && !p.caseSize) throw err(400, T('{product} has no case pack, so enter the amount under "Loose units" instead of cases.', { product: plabel(p) }))
     const qty = r3((l.cases ?? 0) * (p.caseSize ?? 0) + (l.loose ?? 0))
     if (qty < 0 || (qty === 0 && !zero)) throw err(400, T('Enter a quantity greater than zero for {product}.', { product: plabel(p) }))
+    if (!(uomsAll().find((u) => u.key === p.uom)?.decimals ?? false) && (!Number.isInteger(qty) || !Number.isInteger(l.cases ?? 0))) throw err(400, T('{product} is counted in whole numbers - remove the decimals.', { product: plabel(p) }))
     return { productId: p.id, cases: l.cases ?? 0, loose: l.loose ?? 0, qty }
   })
 }
@@ -120,6 +122,8 @@ const csv = (rows0: A[]) => {
 const qs = (path: string) => Object.fromEntries(new URLSearchParams(path.split('?')[1] ?? ''))
 
 type H = (u: A, b: A, m: RegExpMatchArray, q: Record<string, string>) => unknown
+const uomsAll = () => [...BUILTIN_UOMS, ...((db.settings.uoms ??= []) as A[]).map((u) => ({ ...u, builtin: false }))]
+const badUom = (key: string) => err(400, T('"{unit}" is not a unit of measure you can use. Pick one from the list, or ask the super admin to add it.', { unit: key }), 'bad_uom')
 const routes: [string, RegExp, string[] | 'super' | null, H][] = []
 const R = (method: string, re: string, perm: string[] | 'super' | null, h: H) => routes.push([method, new RegExp(`^${re}$`), perm, h])
 const find = (arr: A[], id: string, what: string) => { const x = arr.find((o) => o.id === Number(id)); if (!x) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T(what) }), 'not_found'); return x }
@@ -158,14 +162,41 @@ R('POST', '/locations', ['locations.manage'], (u, b) => {
   const l = { id: db.id('l'), name: b.name, address: b.address ?? '', active: b.active ?? true, ...submission(u) }; db.locations.push(l); log(u, l.status === 'approved' ? 'location.create' : 'location.request', l.name); return l
 })
 R('PUT', '/locations/(\\d+)', ['locations.manage'], (u, b, m) => { const l = find(db.locations.filter(approved), m[1], 'Location'); Object.assign(l, { name: b.name, address: b.address ?? '', active: b.active }); log(u, 'location.update', l.name); return l })
+R('GET', '/uoms', viewAny, () => uomsAll())
+const uomText = (b: A) => {
+  const name = String(b.name ?? '').trim(), short = String(b.short ?? '').trim()
+  const need = (v: string, label: string, max: number) => { if (!v) throw err(400, T('{msg}.', { msg: T('{label} cannot be empty', { label: T(label) }) }), 'validation'); if (v.length > max) throw err(400, T('{msg}.', { msg: T('{label} must be at most {n} characters', { label: T(label), n: max }) }), 'validation') }
+  need(name, 'Name', 40); need(short, 'Short name', 12); return { name, short }
+}
+const dupName = (name: string, except?: string) => uomsAll().some((u) => u.key !== except && u.label.toLowerCase() === name.toLowerCase())
+R('POST', '/uoms', 'super', (u, b) => {
+  const { name, short } = uomText(b)
+  if (dupName(name)) throw err(400, T('A unit called "{name}" already exists.', { name }), 'duplicate')
+  const base = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'unit', taken = new Set(uomsAll().map((x) => x.key))
+  let key = base, n = 2; while (taken.has(key)) key = `${base}-${n++}`
+  const x = { key, label: name, short, decimals: !!b.decimals }; (db.settings.uoms ??= []).push(x); log(u, 'uom.create', name); return { ...x, builtin: false }
+})
+R('PUT', '/uoms/([^/]+)', 'super', (u, b, m) => {
+  const cur = uomsAll().find((x) => x.key === m[1]); if (!cur) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T('Unit') }), 'not_found')
+  if (cur.builtin) throw err(400, T('The built-in units cannot be changed or deleted.'), 'builtin')
+  const { name, short } = uomText(b); if (dupName(name, cur.key)) throw err(400, T('A unit called "{name}" already exists.', { name }), 'duplicate')
+  Object.assign((db.settings.uoms as A[]).find((x) => x.key === cur.key), { label: name, short }); log(u, 'uom.update', name); return { ...cur, label: name, short }
+})
+R('DELETE', '/uoms/([^/]+)', 'super', (u, _b, m) => {
+  const cur = uomsAll().find((x) => x.key === m[1]); if (!cur) throw err(404, T('{what} could not be found. It may have been removed - refresh the page and try again.', { what: T('Unit') }), 'not_found')
+  if (cur.builtin) throw err(400, T('The built-in units cannot be changed or deleted.'), 'builtin')
+  const used = db.products.filter((p: A) => p.uom === cur.key).length
+  if (used) throw err(400, T('"{unit}" is used by {n} product(s), so it cannot be deleted. Change those products to another unit first.', { unit: cur.label, n: used }), 'in_use')
+  db.settings.uoms = (db.settings.uoms as A[]).filter((x) => x.key !== cur.key); log(u, 'uom.delete', cur.label); return null
+})
 R('GET', '/products', viewAny, () => db.products.filter(approved))
 R('POST', '/products', ['products.create'], (u, b) => {
   const bad = Object.keys(b).filter((k) => !['name', 'description', 'color', 'size', 'weight', 'caseSize', 'uom', 'reorderLevel'].includes(k)); if (bad.length) throw err(400, T('{msg}.', { msg: T('{label} contains fields that are not allowed ({list})', { label: T('Request'), list: list(bad, ', ') }) }), 'validation')
-  if (b.uom && !['unit', 'kg', 'm', 'bundle'].includes(b.uom)) throw err(400, T('{msg}.', { msg: T('{label} must be one of: {list}', { label: T('Measured by'), list: list(['unit', 'kg', 'm', 'bundle'], ', ') }) }), 'validation')
+  if (b.uom && !uomsAll().some((u) => u.key === b.uom)) throw badUom(b.uom)
   const p = { id: db.id('p'), sku: skuBase(b.name ?? '', b.color ?? '', b.size ?? '', b.weight ?? '', db), name: b.name || undefined, description: b.description || undefined, color: b.color || undefined, size: b.size || undefined, weight: b.weight || undefined, caseSize: b.caseSize || undefined, uom: b.uom ?? 'unit', reorderLevel: b.reorderLevel ?? 0, active: true, createdAt: now(), ...submission(u) }
   db.products.push(p); log(u, p.status === 'approved' ? 'product.create' : 'product.request', p.sku); return p
 })
-R('PUT', '/products/(\\d+)', ['products.edit'], (u, b, m) => { const p = find(db.products.filter(approved), m[1], 'Product'); Object.assign(p, b, { sku: p.sku, caseSize: b.caseSize || undefined, name: b.name || undefined }); log(u, 'product.update', p.sku); return p })
+R('PUT', '/products/(\\d+)', ['products.edit'], (u, b, m) => { const p = find(db.products.filter(approved), m[1], 'Product'); if (b.uom !== undefined && b.uom !== p.uom && !uomsAll().some((x) => x.key === b.uom)) throw badUom(b.uom); Object.assign(p, b, { sku: p.sku, caseSize: b.caseSize || undefined, name: b.name || undefined }); log(u, 'product.update', p.sku); return p })
 const cv = ['clients.view', 'clients.manage', 'clients.reveal', 'reserves.create', 'outbound.create', 'reserves.view', 'outbound.view']
 R('GET', '/clients', cv, (u) => db.clients.map((c: A) => client(u, c.id)))
 R('POST', '/clients', ['clients.manage'], (u, b) => { const n = db.clients.length; const c = { id: db.id('c'), alias: `Client ${String.fromCharCode(65 + (n % 26))}${n >= 26 ? Math.floor(n / 26) : ''}`, name: b.name, contact: b.contact ?? '', address: b.address ?? '' }; db.clients.push(c); log(u, 'client.create', c.alias); return client(u, c.id) })
