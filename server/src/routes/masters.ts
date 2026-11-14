@@ -3,6 +3,7 @@ import { T, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { hasPerm, requirePerm, requireSuper } from '../auth.js'
+import { assertLoc, canLoc } from '../scope.js'
 import { blindIndex } from '../crypto.js'
 import { AppError, bad, forbidden, notFound } from '../errors.js'
 import { ip, nowIso, wrap } from '../http.js'
@@ -54,7 +55,10 @@ export function masterRoutes(ctx: Ctx) {
   // ---- Locations -------------------------------------------------------------------------------
   const locSchema = z.object({ name: str(100), address: optStr(300), active: z.boolean().default(true) }).strict()
   r.get('/locations', requirePerm('locations.view', 'locations.manage', 'inbound.view', 'inbound.create', 'transfers.view', 'transfers.create', 'reserves.view', 'reserves.create', 'outbound.view', 'outbound.create', 'adjustments.view', 'adjustments.create', 'audits.view', 'audits.create', 'reports.inventory', 'reports.orders', 'products.view', 'dashboard.view'),
-    wrap((_req, res) => res.json((ctx.db.locations.all() as Location[]).filter(isApproved))))
+    wrap((req, res) => res.json((ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && canLoc(req.user!, l.id)))))
+  // Names only, of every active location: a restricted person still has to be able to NAME where a transfer is going.
+  r.get('/locations/destinations', requirePerm('transfers.view', 'transfers.create', 'transfers.receive'),
+    wrap((_req, res) => res.json((ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && l.active).map((l) => ({ id: l.id, name: l.name })))))
   r.post('/locations', requirePerm('locations.manage'), wrap((req, res) => {
     const b = parse(locSchema, req.body)
     if ((ctx.db.locations.all() as Location[]).some((l) => l.status !== 'rejected' && l.name.toLowerCase() === b.name.toLowerCase())) throw new AppError(409, T("A location with this name already exists. Please use a different name."), 'duplicate', [{ field: 'name', message: T("This name is already used.") }])
@@ -65,6 +69,7 @@ export function masterRoutes(ctx: Ctx) {
   r.put('/locations/:id', requirePerm('locations.manage'), wrap((req, res) => {
     const id = idParam(req); const l = ctx.db.locations.get(id) as Location | undefined
     if (!l || !isApproved(l)) throw notFound('Location')
+    assertLoc(req.user!, id)
     const b = parse(locSchema, req.body)
     if ((ctx.db.locations.all() as Location[]).some((x) => x.id !== id && x.status !== 'rejected' && x.name.toLowerCase() === b.name.toLowerCase())) throw new AppError(409, T("A location with this name already exists. Please use a different name."), 'duplicate', [{ field: 'name', message: T("This name is already used.") }])
     const next = { ...l, ...b }

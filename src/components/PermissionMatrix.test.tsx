@@ -6,9 +6,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PermDef } from '@/lib/types'
 import PermissionMatrix from './PermissionMatrix'
 
-const post = vi.fn(async () => ({ user: { email: 'new@x.com' }, temporaryPassword: 'Temp-1234' }))
-const patch = vi.fn(async () => ({}))
-vi.mock('@/lib/api', async (orig) => ({ ...(await orig<typeof import('@/lib/api')>()), post: (...a: unknown[]) => (post as any)(...a), patch: (...a: unknown[]) => (patch as any)(...a) }))
+const post = vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({ user: { email: 'new@x.com' }, temporaryPassword: 'Temp-1234' }))
+const patch = vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({}))
+const PLACES = [{ id: 1, name: 'Karachi', address: '', active: true }, { id: 2, name: 'Dubai', address: '', active: true }]
+vi.mock('@/lib/api', async (orig) => ({ ...(await orig<typeof import('@/lib/api')>()), get: async (path: string) => (path === '/locations' ? PLACES : []), post: (...a: unknown[]) => (post as any)(...a), patch: (...a: unknown[]) => (patch as any)(...a) }))
 import { ToastProvider } from '@/components/ui'
 import { UserForm } from '@/pages/Users'
 
@@ -18,6 +19,7 @@ const PERMS: PermDef[] = [
   { key: 'inbound.view', label: 'View inbound orders', module: 'Inbound' },
   { key: 'inbound.approve', label: 'Approve inbound orders', module: 'Inbound', sensitive: true },
   { key: 'logs.view', label: 'View activity log', module: 'Administration', sensitive: true },
+  { key: 'locations.view', label: 'View locations', module: 'Locations' },
 ]
 
 function Harness({ start = [] as string[] }) {
@@ -127,5 +129,80 @@ describe('add / edit user: sensitive access is confirmed before saving', () => {
     const dlg = await screen.findByRole('dialog', { name: 'Give sensitive access?' })
     expect(within(dlg).getByText('View activity log')).toBeInTheDocument(); expect(within(dlg).queryByText('Approve inbound orders')).toBeNull()
     expect(patch).not.toHaveBeenCalled()
+  })
+})
+
+const places = [{ id: 1, name: 'Karachi' }, { id: 2, name: 'Dubai' }]
+function PlacesHarness({ start = [] as number[], unrestricted = false }) {
+  const [sel, setSel] = useState(new Set<string>()); const [ps, setPs] = useState(new Set(start))
+  return <><PermissionMatrix perms={PERMS} sel={sel} onChange={setSel} places={places} placeSel={ps} onPlaceChange={setPs} unrestricted={unrestricted} /><output data-testid="places">{[...ps].sort().join(',')}</output></>
+}
+
+describe('location access rows (under the Locations head)', () => {
+  it('lists every location once the head is opened, so one location can be given on its own', async () => {
+    render(<PlacesHarness />)
+    expect(screen.getByRole('button', { name: /Locations/ })).toHaveTextContent('No locations')
+    expect(screen.queryByRole('radio', { name: 'Karachi: View & Edit' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /Locations/ }))
+    expect(screen.getByText('Location access')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Karachi: View & Edit' }))
+    expect(screen.getByTestId('places')).toHaveTextContent(/^1$/) // Dubai is NOT included
+    expect(screen.getByRole('radio', { name: 'Dubai: None' })).toBeChecked()
+    expect(screen.getByRole('button', { name: /Locations/ })).toHaveTextContent('1 of 2 locations')
+    expect(tone('Karachi: View & Edit')).toBe('blue')
+  })
+
+  it('"All locations" gives or removes every location at once', async () => {
+    render(<PlacesHarness start={[2]} />)
+    await userEvent.click(screen.getByRole('button', { name: /Locations/ }))
+    await userEvent.click(screen.getByRole('radio', { name: 'All locations: View & Edit' }))
+    expect(screen.getByTestId('places')).toHaveTextContent('1,2')
+    await userEvent.click(screen.getByRole('radio', { name: 'All locations: None' }))
+    expect(screen.getByTestId('places')).toHaveTextContent(/^$/)
+  })
+
+  it('says so when a person has no restriction yet (older accounts)', async () => {
+    render(<PlacesHarness start={[1, 2]} unrestricted />)
+    expect(screen.getByRole('button', { name: /Locations/ })).toHaveTextContent('All locations')
+    await userEvent.click(screen.getByRole('button', { name: /Locations/ }))
+    expect(screen.getByText(/can use every location, including new ones/)).toBeInTheDocument()
+  })
+
+  it('has no location rows at all when the screen does not pass any (other modules unaffected)', () => {
+    render(<Harness />)
+    expect(screen.queryByText('Location access')).toBeNull()
+  })
+})
+
+describe('add / edit user: what is sent for location access', () => {
+  beforeEach(() => { post.mockClear(); patch.mockClear() })
+  const renderForm = (user?: any) => render(<QueryClientProvider client={new QueryClient()}><ToastProvider><UserForm user={user} perms={PERMS} onClose={vi.fn()} onCreated={vi.fn()} /></ToastProvider></QueryClientProvider>)
+  const open = async () => { await userEvent.click(await screen.findByRole('button', { name: /Locations/ })) }
+
+  it('a new person starts with NO locations, and exactly the ones ticked are sent', async () => {
+    renderForm()
+    await userEvent.type(screen.getByLabelText('Full name'), 'Omar'); await userEvent.type(screen.getByLabelText('Email'), 'o@x.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Create user' }))
+    expect(post).toHaveBeenLastCalledWith('/users', expect.objectContaining({ locationIds: [] }))
+    post.mockClear(); await open()
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dubai: View & Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create user' }))
+    expect(post).toHaveBeenLastCalledWith('/users', expect.objectContaining({ locationIds: [2] }))
+  })
+
+  it('an older user with no restriction is left alone unless the locations are changed', async () => {
+    renderForm({ id: 7, name: 'Old', email: 'old@x.com', role: 'user', active: true, permissions: [], simpleScreen: false })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(patch.mock.calls.at(-1)![1]).not.toHaveProperty('locationIds') // stays unrestricted, including future locations
+    patch.mockClear(); await open()
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dubai: None' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(patch.mock.calls.at(-1)![1]).toMatchObject({ locationIds: [1] }) // now explicit: Karachi only
+  })
+
+  it('a super admin form sends no locations (super admins always have every one)', async () => {
+    renderForm({ id: 1, name: 'Boss', email: 'b@x.com', role: 'super_admin', active: true, permissions: [], simpleScreen: false })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(patch.mock.calls.at(-1)![1]).not.toHaveProperty('locationIds')
   })
 })

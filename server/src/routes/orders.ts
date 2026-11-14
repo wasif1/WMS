@@ -3,6 +3,7 @@ import { T, render, statusWord } from '../i18n/index.js'
 import { z } from 'zod'
 import type { Ctx } from '../context.js'
 import { requirePerm } from '../auth.js'
+import { assertLoc, canAudit, canLoc } from '../scope.js'
 import { bad, conflict, forbidden, notFound } from '../errors.js'
 import { ip, nowIso, wrap } from '../http.js'
 import type { Actor, Client, Comment, Line, Location, Product, User } from '../models.js'
@@ -33,7 +34,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
     wrap((req, res) => {
       const q = z.object({ locationId: z.coerce.number().int().optional(), productId: z.coerce.number().int().optional() }).parse(req.query)
       res.json((ctx.db.stock.all() as any[])
-        .filter((s) => (!q.locationId || s.locationId === q.locationId) && (!q.productId || s.productId === q.productId))
+        .filter((s) => canLoc(req.user!, s.locationId) && (!q.locationId || s.locationId === q.locationId) && (!q.productId || s.productId === q.productId))
         .map((s) => ({ productId: s.productId, locationId: s.locationId, onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved })))
     }))
 
@@ -41,11 +42,11 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const inboundSchema = z.object({ locationId: z.number().int().positive(), reference: optStr(100), comments: optStr(1000), notifyEmails: emails.default([]), lines: linesSchema }).strict()
   r.get('/inbound', requirePerm('inbound.view'), wrap((req, res) => {
     const q = dateQ.parse(req.query)
-    res.json((ctx.db.inbound_orders.all() as any[]).filter((o) => (!q.status || o.status === q.status) && (!q.locationId || o.locationId === q.locationId) && inRange(o.enteredBy.at, q)).reverse())
+    res.json((ctx.db.inbound_orders.all() as any[]).filter((o) => canLoc(req.user!, o.locationId) && (!q.status || o.status === q.status) && (!q.locationId || o.locationId === q.locationId) && inRange(o.enteredBy.at, q)).reverse())
   }))
   r.post('/inbound', requirePerm('inbound.create'), wrap((req, res) => {
     const b = parse(inboundSchema, req.body)
-    checkLoc(b.locationId)
+    checkLoc(b.locationId); assertLoc(req.user!, b.locationId)
     const o = ctx.db.inbound_orders.insert({
       locationId: b.locationId, reference: b.reference, notifyEmails: b.notifyEmails, lines: inv.buildLines(b.lines), status: 'pending',
       comments: comment(req.user!, b.comments), enteredBy: actor(req.user!),
@@ -56,6 +57,8 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/inbound/:id/approve', requirePerm('inbound.approve'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.inbound_orders.get(id) as any
     if (!o) throw notFound('Inbound order')
+    assertLoc(req.user!, o.locationId)
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'pending') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const u = req.user!
     if (o.enteredBy.userId === u.id && u.role !== 'super_admin') throw forbidden(T("You entered this packing list, so someone else must approve it (separation of duties)."), 'separation_of_duties')
@@ -75,6 +78,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/inbound/:id/reject', requirePerm('inbound.approve'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.inbound_orders.get(id) as any
     if (!o) throw notFound('Inbound order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'pending') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const b = parse(z.object({ comment: z.string().trim().min(1).max(1000) }).strict(), req.body)
     ctx.db.inbound_orders.update(id, { ...o, status: 'rejected', decidedBy: actor(req.user!), comments: [...o.comments, ...comment(req.user!, b.comment)] })
@@ -86,12 +90,12 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const transferSchema = z.object({ fromLocationId: z.number().int().positive(), toLocationId: z.number().int().positive(), note: optStr(1000), lines: linesSchema }).strict()
   r.get('/transfers', requirePerm('transfers.view'), wrap((req, res) => {
     const q = dateQ.parse(req.query)
-    res.json((ctx.db.transfer_orders.all() as any[]).filter((o) => (!q.status || o.status === q.status) && (!q.locationId || o.fromLocationId === q.locationId || o.toLocationId === q.locationId) && inRange(o.createdBy.at, q)).reverse())
+    res.json((ctx.db.transfer_orders.all() as any[]).filter((o) => (canLoc(req.user!, o.fromLocationId) || canLoc(req.user!, o.toLocationId)) && (!q.status || o.status === q.status) && (!q.locationId || o.fromLocationId === q.locationId || o.toLocationId === q.locationId) && inRange(o.createdBy.at, q)).reverse())
   }))
   r.post('/transfers', requirePerm('transfers.create'), wrap((req, res) => {
     const b = parse(transferSchema, req.body)
     if (b.fromLocationId === b.toLocationId) throw bad(T("Choose two different locations - the source and destination can't be the same."), 'validation', [{ field: 'toLocationId', message: T("Pick a different destination.") }])
-    checkLoc(b.fromLocationId); checkLoc(b.toLocationId)
+    checkLoc(b.fromLocationId); checkLoc(b.toLocationId); assertLoc(req.user!, b.fromLocationId) // the destination may be anywhere; the source must be yours
     const o = ctx.db.transfer_orders.insert({ ...b, lines: inv.buildLines(b.lines), status: 'draft', createdBy: actor(req.user!) })
     ctx.audit.log(req.user!, 'transfer.create', { entity: 'transfer', entityId: o.id, ip: ip(req) })
     res.status(201).json(o)
@@ -99,6 +103,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/submit', requirePerm('transfers.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
+    assertLoc(req.user!, o.fromLocationId)
     if (o.status !== 'draft') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => {
       for (const l of o.lines as Line[]) inv.apply(l.productId, o.fromLocationId, { onHand: -l.qty }, { type: 'transfer_out', userId: req.user!.id, refType: 'transfer', refId: id })
@@ -110,6 +115,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/cancel', requirePerm('transfers.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
+    assertLoc(req.user!, o.fromLocationId)
     if (o.status !== 'draft') throw conflict(T("Only draft transfers can be cancelled. This one has already been sent."), 'already_processed')
     ctx.db.transfer_orders.update(id, { ...o, status: 'cancelled' })
     ctx.audit.log(req.user!, 'transfer.cancel', { entity: 'transfer', entityId: id })
@@ -118,6 +124,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/transfers/:id/receive', requirePerm('transfers.receive'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.transfer_orders.get(id) as any
     if (!o) throw notFound('Transfer order')
+    assertLoc(req.user!, o.toLocationId)
     if (o.status !== 'in_transit') throw conflict(T("This transfer is {status}, so it cannot be received. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     const b = parse(z.object({ received: z.array(lineInput).optional(), comment: optStr(1000) }).strict(), req.body)
     const received: Line[] = b.received ? inv.buildLines(b.received, true) : o.lines
@@ -136,12 +143,12 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const reserveSchema = z.object({ locationId: z.number().int().positive(), clientId: z.number().int().positive().optional(), note: optStr(1000), lines: linesSchema }).strict()
   const listWithClient = (store: any, dateField: string) => wrap((req, res) => {
     const q = dateQ.parse(req.query)
-    res.json((store.all() as any[]).filter((o) => (!q.status || o.status === q.status) && (!q.locationId || o.locationId === q.locationId) && (!q.clientId || o.clientId === q.clientId) && inRange(o[dateField].at, q)).reverse().map((o) => withClient(req, o)))
+    res.json((store.all() as any[]).filter((o) => canLoc(req.user!, o.locationId) && (!q.status || o.status === q.status) && (!q.locationId || o.locationId === q.locationId) && (!q.clientId || o.clientId === q.clientId) && inRange(o[dateField].at, q)).reverse().map((o) => withClient(req, o)))
   })
   r.get('/reserves', requirePerm('reserves.view'), listWithClient(ctx.db.reserve_orders, 'createdBy'))
   r.post('/reserves', requirePerm('reserves.create'), wrap((req, res) => {
     const b = parse(reserveSchema, req.body)
-    checkLoc(b.locationId); if (b.clientId) checkClient(b.clientId)
+    checkLoc(b.locationId); assertLoc(req.user!, b.locationId); if (b.clientId) checkClient(b.clientId)
     const lines = inv.buildLines(b.lines)
     const o = ctx.db.tx(() => {
       const created = ctx.db.reserve_orders.insert({ ...b, lines, status: 'active', createdBy: actor(req.user!) })
@@ -158,6 +165,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/reserves/:id/cancel', requirePerm('reserves.convert'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.reserve_orders.get(id) as any
     if (!o) throw notFound('Reserve order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'active') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => { release(o, req.user!.id, 'unreserve', 'reserve', id); ctx.db.reserve_orders.update(id, { ...o, status: 'cancelled', closedBy: actor(req.user!) }) })
     ctx.audit.log(req.user!, 'reserve.cancel', { entity: 'reserve', entityId: id, ip: ip(req) })
@@ -166,6 +174,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/reserves/:id/convert', requirePerm('reserves.convert', 'outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.reserve_orders.get(id) as any
     if (!o) throw notFound('Reserve order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'active') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     if (!o.clientId) throw bad(T("Choose a client for this reserve order before moving it to outbound."), 'validation', [{ field: 'clientId', message: T("A client is required.") }])
     const b = parse(z.object({ actual: z.array(lineInput).min(1), comment: optStr(1000) }).strict(), req.body)
@@ -194,11 +203,11 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   const allocate = (ls: Line[], locationId: number, userId: number, refId: number) => { for (const l of ls) inv.apply(l.productId, locationId, { reserved: l.qty }, { type: 'reserve', userId, refType: 'outbound', refId }) }
   r.get('/outbound', requirePerm('outbound.view'), listWithClient(ctx.db.outbound_orders, 'createdBy'))
   r.get('/outbound/:id', requirePerm('outbound.view'), wrap((req, res) => {
-    const o = ctx.db.outbound_orders.get(idParam(req)); if (!o) throw notFound('Outbound order'); res.json(withClient(req, o))
+    const o = ctx.db.outbound_orders.get(idParam(req)) as any; if (!o) throw notFound('Outbound order'); assertLoc(req.user!, o.locationId); res.json(withClient(req, o))
   }))
   r.post('/outbound', requirePerm('outbound.create'), wrap((req, res) => {
     const b = parse(outboundSchema, req.body)
-    checkLoc(b.locationId); checkClient(b.clientId)
+    checkLoc(b.locationId); assertLoc(req.user!, b.locationId); checkClient(b.clientId)
     const lines = inv.buildLines(b.lines)
     const o = ctx.db.tx(() => { const c = ctx.db.outbound_orders.insert({ ...b, lines, status: 'saved', createdBy: actor(req.user!) }); allocate(lines, b.locationId, req.user!.id, c.id); return c })
     ctx.audit.log(req.user!, 'outbound.save', { entity: 'outbound', entityId: o.id, ip: ip(req) })
@@ -207,6 +216,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.put('/outbound/:id', requirePerm('outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'saved') throw conflict(T("Only saved orders can be edited. This one has already been confirmed or cancelled."), 'already_processed')
     const b = parse(outboundSchema.omit({ locationId: true }), req.body)
     checkClient(b.clientId)
@@ -222,6 +232,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/outbound/:id/confirm', requirePerm('outbound.confirm'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'saved') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => {
       for (const l of o.lines as Line[]) inv.apply(l.productId, o.locationId, { onHand: -l.qty, reserved: -l.qty }, { type: 'outbound', userId: req.user!.id, refType: 'outbound', refId: id })
@@ -234,6 +245,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/outbound/:id/cancel', requirePerm('outbound.create'), wrap((req, res) => {
     const id = idParam(req); const o = ctx.db.outbound_orders.get(id) as any
     if (!o) throw notFound('Outbound order')
+    assertLoc(req.user!, o.locationId)
     if (o.status !== 'saved') throw conflict(T("This order was already {status}, possibly by someone else. Refresh the page to see the latest.", { status: statusWord(o.status) }), 'already_processed')
     ctx.db.tx(() => { release(o, req.user!.id, 'unreserve', 'outbound', id); ctx.db.outbound_orders.update(id, { ...o, status: 'cancelled', closedBy: actor(req.user!) }) })
     ctx.audit.log(req.user!, 'outbound.cancel', { entity: 'outbound', entityId: id, ip: ip(req) })
@@ -242,11 +254,11 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
 
   // ============================ ADJUSTMENTS ============================
   // The team SUBMITS an adjustment request. Stock changes only when the owner approves it (see /approvals).
-  r.get('/adjustments', requirePerm('adjustments.view'), wrap((_req, res) => res.json((ctx.db.adjustments.all() as any[]).map((a) => ({ ...a, status: a.status ?? 'approved' })).reverse())))
+  r.get('/adjustments', requirePerm('adjustments.view'), wrap((req, res) => res.json((ctx.db.adjustments.all() as any[]).filter((a) => canLoc(req.user!, a.locationId)).map((a) => ({ ...a, status: a.status ?? 'approved' })).reverse())))
   r.post('/adjustments', requirePerm('adjustments.create'), wrap((req, res) => {
     const b = parse(z.object({ productId: z.number().int().positive(), locationId: z.number().int().positive(), newQty: z.number().finite().nonnegative().max(1e9), reason: z.string().trim().min(3).max(500) }).strict(), req.body)
     const prod = ctx.db.products.get(b.productId) as Product | undefined
-    if (!prod || !isApproved(prod)) throw notFound('Product'); checkLoc(b.locationId)
+    if (!prod || !isApproved(prod)) throw notFound('Product'); checkLoc(b.locationId); assertLoc(req.user!, b.locationId)
     const s = inv.getStock(b.productId, b.locationId)
     const delta = Math.round((b.newQty - s.onHand) * 1000) / 1000
     if (delta === 0) throw bad(T("That is the same as the current stock, so there is nothing to adjust."), 'validation', [{ field: 'newQty', message: T("Enter a different quantity.") }])
@@ -265,12 +277,12 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   // ============================ AUDITS ============================
   // counting -> (team submits) -> submitted -> (owner approves) -> approved   [or rejected]. Stock updates ONLY on approval.
   const diffsOf = (a: any) => a.lines.filter((l: any) => l.counted != null && l.counted !== l.system)
-  r.get('/audits', requirePerm('audits.view'), wrap((_req, res) => res.json((ctx.db.audits.all() as any[]).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: diffsOf(a).length })))))
-  r.get('/audits/:id', requirePerm('audits.view'), wrap((req, res) => { const a = ctx.db.audits.get(idParam(req)); if (!a) throw notFound('Audit'); res.json(a) }))
+  r.get('/audits', requirePerm('audits.view'), wrap((req, res) => res.json((ctx.db.audits.all() as any[]).filter((a) => canAudit(req.user!, a)).reverse().map((a) => ({ ...a, lines: undefined, lineCount: a.lines.length, diffCount: diffsOf(a).length })))))
+  r.get('/audits/:id', requirePerm('audits.view'), wrap((req, res) => { const a = ctx.db.audits.get(idParam(req)) as any; if (!a || !canAudit(req.user!, a)) throw notFound('Audit'); res.json(a) }))
   r.post('/audits', requirePerm('audits.create'), wrap((req, res) => {
     const b = parse(z.object({ name: z.string().trim().max(100).optional(), locationId: z.number().int().positive().optional() }).strict(), req.body)
-    if (b.locationId) checkLoc(b.locationId)
-    const locs = (ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && l.active && (!b.locationId || l.id === b.locationId))
+    if (b.locationId) { checkLoc(b.locationId); assertLoc(req.user!, b.locationId) }
+    const locs = (ctx.db.locations.all() as Location[]).filter((l) => isApproved(l) && l.active && canLoc(req.user!, l.id) && (!b.locationId || l.id === b.locationId))
     const prods = (ctx.db.products.all() as Product[]).filter((p) => isApproved(p) && p.active)
     const lines = locs.flatMap((l) => prods.map((p) => ({ productId: p.id, locationId: l.id, system: inv.getStock(p.id, l.id).onHand, counted: null as number | null })))
     if (!lines.length) throw bad(T("There is nothing to audit yet. Add approved products and locations first."))
@@ -281,6 +293,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.put('/audits/:id/counts', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
+    if (!canAudit(req.user!, a)) throw notFound('Audit')
     if (a.status !== 'counting') throw conflict(T("This audit has already been submitted, so the counts can no longer be changed."), 'already_processed')
     const b = parse(z.object({ counts: z.array(z.object({ productId: z.number().int(), locationId: z.number().int(), counted: z.number().finite().nonnegative().max(1e9).nullable() }).strict()).max(5000) }).strict(), req.body)
     for (const c of b.counts) {
@@ -294,6 +307,7 @@ export function orderRoutes(ctx: Ctx, inv: Inventory) {
   r.post('/audits/:id/submit', requirePerm('audits.count'), wrap((req, res) => {
     const id = idParam(req); const a = ctx.db.audits.get(id) as any
     if (!a) throw notFound('Audit')
+    if (!canAudit(req.user!, a)) throw notFound('Audit')
     if (a.status !== 'counting') throw conflict(T("This audit was already submitted."), 'already_processed')
     if (a.lines.some((l: any) => l.counted == null)) throw bad(T("Enter a physical count for every line before submitting. Lines with no count are still empty."), 'validation')
     ctx.db.audits.update(id, { ...a, status: 'submitted', submittedBy: actor(req.user!) })

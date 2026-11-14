@@ -5,6 +5,8 @@ import { errorLine } from './errors'
 import type { Client, Location, Product } from './types'
 
 export const useLocations = (enabled = true) => useQuery({ queryKey: ['locations'], queryFn: () => get<Location[]>('/locations'), enabled })
+/** Names of every active location, for NAMING where a transfer goes (the normal list only has the places a person may use). */
+export const useDestinations = (enabled = true) => useQuery({ queryKey: ['destinations'], queryFn: () => get<{ id: number; name: string }[]>('/locations/destinations'), enabled })
 export const useProducts = (enabled = true) => useQuery({ queryKey: ['products'], queryFn: () => get<Product[]>('/products'), enabled })
 export const useClients = (enabled = true) => useQuery({ queryKey: ['clients'], queryFn: () => get<Client[]>('/clients'), enabled })
 

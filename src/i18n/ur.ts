@@ -809,4 +809,12 @@ export const ur: Record<string, string> = {
   "Action by": "کارروائی کرنے والا",
   "Total inventory": "کل انوینٹری",
   "Custom": "حسبِ ضرورت",
+  "No location access yet": "ابھی کسی مقام تک رسائی نہیں",
+  "A super admin has not given you access to any location, so there is nothing to show yet. Ask them to give you access, then reload this page.": "سپر ایڈمن نے آپ کو ابھی کسی مقام تک رسائی نہیں دی، اس لیے دکھانے کو کچھ نہیں۔ ان سے رسائی دینے کا کہیں، پھر یہ صفحہ دوبارہ کھولیں۔",
+  "{n} of {total} locations": "{total} میں سے {n} مقامات",
+  "No locations": "کوئی مقام نہیں",
+  "Location access": "مقام تک رسائی",
+  "Right now this person can use every location, including new ones. Choose below to limit them.": "اس وقت یہ شخص ہر مقام استعمال کر سکتا ہے، نئے مقامات سمیت۔ محدود کرنے کے لیے نیچے منتخب کریں۔",
+  "This person can only see and work with the locations marked here.": "یہ شخص صرف یہاں نشان زد مقامات دیکھ اور ان پر کام کر سکتا ہے۔",
+  "No locations have been added yet.": "ابھی کوئی مقام شامل نہیں کیا گیا۔",
 }

@@ -8,7 +8,7 @@ import { LinesTable, Who } from '@/components/OrderBits'
 import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, StatusBadge, Table, SimpleSteps } from '@/components/ui'
 import { get, post } from '@/lib/api'
 import { useSimple } from '@/lib/simple'
-import { useAction, useLocations, useProducts } from '@/lib/hooks'
+import { useAction, useDestinations, useLocations, useProducts } from '@/lib/hooks'
 import type { StockRow } from '@/lib/types'
 import { fmt, fmtDate } from '@/lib/utils'
 import { productLabel } from '@/lib/catalog'
@@ -17,7 +17,8 @@ export default function Transfers() {
   const { can } = useAuth(); const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
   const [creating, setCreating] = useState(false); const [open, setOpen] = useState<any>(null); const [status, setStatus] = useState('')
   const q = useQuery({ queryKey: ['transfers', status], queryFn: () => get<any[]>(`/transfers${status ? `?status=${status}` : ''}`), enabled: can('transfers.view') })
-  const loc = (id: number) => locs.find((l) => l.id === id)?.name ?? id
+  const dest = useDestinations(can('transfers.view'))
+  const loc = (id: number) => dest.data?.find((l) => l.id === id)?.name ?? locs.find((l) => l.id === id)?.name ?? id
   return (
     <>
       <PageHeader title={t("Transfer orders")} subtitle={t("Move inventory between locations. Stock stays 'in transit' until the receiver confirms.")} actions={can('transfers.create') && <button className="btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />{t("New transfer")}</button>} />
@@ -38,7 +39,7 @@ export default function Transfers() {
 
 export function NewTransfer({ onClose }: { onClose: () => void }) {
   const simple = useSimple()
-  const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts()
+  const { data: locs = [] } = useLocations(); const { data: prods = [] } = useProducts(); const { data: destinations = [] } = useDestinations()
   const [from, setFrom] = useState<number | ''>(''), [to, setTo] = useState<number | ''>(''), [note, setNote] = useState(''), [lines, setLines] = useState<LineDraft[]>([emptyLine()])
   const stock = useQuery({ queryKey: ['stock', from], queryFn: () => get<StockRow[]>(`/stock?locationId=${from}`), enabled: !!from })
   const save = useAction(() => post('/transfers', { fromLocationId: from, toLocationId: to, note, lines: toPayload(lines) }), { ok: t("Transfer order created (draft)"), invalidate: ['transfers'], onSuccess: onClose })
@@ -48,7 +49,7 @@ export function NewTransfer({ onClose }: { onClose: () => void }) {
         {simple && <SimpleSteps steps={[t('“From” is where the goods are now. “To” is where they are going.'), t('Choose each product and type how many to move.'), t('Press Save. Then press “Send it” under “Waiting for you”.')]} />}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("From (source)")}><select className="input" value={from} onChange={(e) => setFrom(Number(e.target.value) || '')}><option value="">{t("Select…")}</option>{locs.filter((l) => l.active).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
-          <Field label={t("To (destination)")}><select className="input" value={to} onChange={(e) => setTo(Number(e.target.value) || '')}><option value="">{t("Select…")}</option>{locs.filter((l) => l.active && l.id !== from).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
+          <Field label={t("To (destination)")}><select className="input" value={to} onChange={(e) => setTo(Number(e.target.value) || '')}><option value="">{t("Select…")}</option>{destinations.filter((l) => l.id !== from).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field>
         </div>
         {from ? <LinesEditor lines={lines} onChange={setLines} products={prods} stock={stock.data ?? []} /> : <p className="text-sm text-slate-500">{t("Choose a source location to see available quantities.")}</p>}
         <Field label={t("Note")}><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("e.g. requested by …")} /></Field>

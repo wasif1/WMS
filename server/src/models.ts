@@ -8,6 +8,8 @@ export interface User {
   permissions: string[]
   /** staff who see the simple one-page screen (no side menu) instead of the full app */
   simpleScreen?: boolean
+  /** Locations this person may see and work with. ABSENT = every location (how all older users behave); a list restricts them to those. Super admins always have every location. */
+  locationIds?: number[]
   /** preferred interface language, saved when the user switches */
   language?: 'en' | 'ur'
   passwordHash: string

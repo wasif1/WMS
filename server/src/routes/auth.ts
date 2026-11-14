@@ -17,7 +17,7 @@ const GENERIC = T('Incorrect email or password. For security, an account is lock
 
 export const publicUser = (u: User) => ({
   id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, simpleScreen: u.role !== 'super_admin' && !!u.simpleScreen, language: u.language,
-  permissions: effectivePerms(u), mustChangePassword: u.mustChangePassword,
+  permissions: effectivePerms(u), locationIds: u.role === 'super_admin' ? undefined : u.locationIds, mustChangePassword: u.mustChangePassword,
   totpEnabled: !!u.totpSecret, mfaSetupRequired: config.requireMfa && !u.totpSecret,
   lastLoginAt: u.lastLoginAt, createdAt: u.createdAt, locked: !!u.lockedUntil && u.lockedUntil > Date.now(),
 })

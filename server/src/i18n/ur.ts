@@ -193,4 +193,5 @@ export const ur: Record<string, string> = {
  "\"{unit}\" is used by {n} product(s), so it cannot be deleted. Change those products to another unit first.": "\"{unit}\" {n} پروڈکٹ(س) میں استعمال ہو رہی ہے، اس لیے حذف نہیں ہو سکتی۔ پہلے ان پروڈکٹس کی اکائی تبدیل کریں۔",
  "Short name": "مختصر نام",
  "Allow decimals": "اعشاریہ کی اجازت",
+ "You don't have access to this location. Ask a super admin to give you access.": "آپ کو اس مقام تک رسائی حاصل نہیں ہے۔ سپر ایڈمن سے رسائی دینے کا کہیں۔",
 }

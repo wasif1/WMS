@@ -3,7 +3,7 @@ import { t, Trans, ts } from '@/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Save } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, StatusBadge, Table } from '@/components/ui'
+import { Empty, ErrorBox, Field, Modal, Num, PageHeader, PageLoader, StatusBadge, Table } from '@/components/ui'
 import { get, post, put } from '@/lib/api'
 import { useAction, useLocations, useProducts } from '@/lib/hooks'
 import { fmt, fmtDate } from '@/lib/utils'
@@ -58,7 +58,7 @@ export function Sheet({ id, onClose }: { id: number; onClose: () => void }) {
     <Modal open onClose={onClose} title={a ? a.name : t("Audit")} wide>
       {!a ? <PageLoader /> : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4"><StatusBadge status={a.status} /><span className="text-sm text-slate-600">{t('{n} difference(s) highlighted in red', { n: diffLines.length })}</span>{a.submittedBy && <span className="text-sm text-slate-500">{t('Submitted by {name} · {when}', { name: a.submittedBy.name, when: fmtDate(a.submittedBy.at) })}</span>}</div>
+          <div className="flex flex-wrap items-center gap-4"><StatusBadge status={a.status} /><span className="text-sm text-slate-600"><Trans k="{n} difference(s) highlighted in red" vars={{ n: <Num>{diffLines.length}</Num> }} /></span>{a.submittedBy && <span className="text-sm text-slate-500">{t('Submitted by {name} · {when}', { name: a.submittedBy.name, when: fmtDate(a.submittedBy.at) })}</span>}</div>
           {(review || a.status === 'approved' || a.status === 'rejected') && (
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="mb-2 text-sm font-semibold">{t("Summary of differences (counted vs system stock)")}</p>

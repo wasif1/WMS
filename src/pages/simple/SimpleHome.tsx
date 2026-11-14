@@ -2,14 +2,14 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Archive, ArrowLeftRight, BarChart3, CheckCircle2, ChevronRight, ClipboardCheck, Clock, Download, HelpCircle, MapPin, PackageCheck, PackageMinus, PackagePlus, PackageSearch, Search, SlidersHorizontal, Truck, X, XCircle } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { Badge, Card, Empty, ErrorBox, Modal, PageLoader } from '@/components/ui'
+import { Badge, Card, Empty, ErrorBox, Modal, Num, PageLoader } from '@/components/ui'
 import { get } from '@/lib/api'
-import { useLocations, useProducts } from '@/lib/hooks'
+import { useDestinations, useLocations, useProducts } from '@/lib/hooks'
 import { hasOwnerWorkflow, matchProduct, stockLevel, summarizeStock, tilesFor, type StockLevel, type TileId } from '@/lib/operator'
 import { variationOf } from '@/lib/catalog'
 import type { Product, StockRow } from '@/lib/types'
 import { cn, fmt, fmtDate } from '@/lib/utils'
-import { locale, t, ts } from '@/i18n'
+import { locale, t, Trans, ts } from '@/i18n'
 import { approvalSummary } from '@/i18n/describe'
 import { NewInbound, Review as InboundReview } from '../Inbound'
 import { Detail as TransferDetail, NewTransfer } from '../Transfers'
@@ -173,7 +173,7 @@ function ProductCard({ p, s, L, onOpen }: { p: Product; s: ReturnType<typeof sum
       <span className="shrink-0 text-end">
         <span className={cn('block text-3xl font-bold leading-none', s.available > 0 ? 'text-slate-900' : 'text-red-600')}>{fmt(s.available)}</span>
         <span className="block text-sm text-slate-500">{t('available')}</span>
-        {s.boxes !== null && <span className="block text-sm text-slate-500">{t('≈ {n} boxes', { n: fmt(s.boxes) })}</span>}
+        {s.boxes !== null && <span className="block text-sm text-slate-500"><Trans k="≈ {n} boxes" vars={{ n: <Num>{fmt(s.boxes)}</Num> }} /></span>}
         <span className={cn('mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-semibold', lv.cls)}>{lv.icon}{t(lv.text)}</span>
       </span>
     </button>
@@ -183,7 +183,8 @@ function ProductCard({ p, s, L, onOpen }: { p: Product; s: ReturnType<typeof sum
 // ---------------------------------------------------------------- Things waiting for me
 function TodoList({ onOpen }: { onOpen: (o: Open) => void }) {
   const { can } = useAuth(); const locs = useLocations()
-  const lname = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? '…'
+  const dest = useDestinations(can('transfers.view'))
+  const lname = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? dest.data?.find((l) => l.id === id)?.name ?? '…'
   const units = (o: any) => fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))
   const both = (a: boolean, b: boolean) => a && b
   const transfers = useQuery({ queryKey: ['transfers', 'todo'], queryFn: () => get<any[]>('/transfers?status=in_transit'), enabled: both(can('transfers.view'), can('transfers.receive')) })
@@ -193,12 +194,12 @@ function TodoList({ onOpen }: { onOpen: (o: Open) => void }) {
   const inbound = useQuery({ queryKey: ['inbound', 'todo'], queryFn: () => get<any[]>('/inbound?status=pending'), enabled: both(can('inbound.view'), can('inbound.approve')) })
   const audits = useQuery({ queryKey: ['audits', 'todo'], queryFn: () => get<any[]>('/audits'), enabled: both(can('audits.view'), can('audits.count')) })
   const route = (o: any) => `${lname(o.fromLocationId)} ⟶ ${lname(o.toLocationId)}`
-  const items: { key: string; icon: ReactNode; tone: string; title: string; sub: string; button: string; go: () => void }[] = [
-    ...(transfers.data ?? []).map((o) => ({ key: `t${o.id}`, tone: 'sky', icon: <Truck className="h-7 w-7" />, title: t('Goods arriving: {route}', { route: route(o) }), sub: t('{n} units on the way. Check them when they arrive.', { n: units(o) }), button: t('Receive'), go: () => onOpen({ kind: 'receive', order: o }) })),
-    ...(drafts.data ?? []).map((o) => ({ key: `d${o.id}`, tone: 'sky', icon: <ArrowLeftRight className="h-7 w-7" />, title: t('Ready to send: {route}', { route: route(o) }), sub: t('{n} units saved. Press Send when the goods leave.', { n: units(o) }), button: t('Send it'), go: () => onOpen({ kind: 'receive', order: o }) })),
-    ...(outbound.data ?? []).map((o) => ({ key: `o${o.id}`, tone: 'indigo', icon: <PackageMinus className="h-7 w-7" />, title: t('Customer order #{id} is ready to check', { id: o.id }), sub: t('{n} units from {place}. Check, then confirm.', { n: units(o), place: lname(o.locationId) }), button: t('Check & confirm'), go: () => onOpen({ kind: 'outboundReview', order: o }) })),
-    ...(reserves.data ?? []).map((o) => ({ key: `r${o.id}`, tone: 'amber', icon: <Archive className="h-7 w-7" />, title: t('Stock kept aside #{id}', { id: o.id }), sub: t('{n} units at {place}. Send it out when the customer collects.', { n: units(o), place: lname(o.locationId) }), button: t('Open'), go: () => onOpen({ kind: 'reserveProcess', order: o }) })),
-    ...(inbound.data ?? []).map((o) => ({ key: `i${o.id}`, tone: 'green', icon: <Download className="h-7 w-7" />, title: t('Delivery #{id} waits for a check', { id: o.id }), sub: t('{n} units entered by {name}. Check the boxes, then approve.', { n: units(o), name: o.enteredBy.name }), button: t('Check'), go: () => onOpen({ kind: 'inboundReview', order: o }) })),
+  const items: { key: string; icon: ReactNode; tone: string; title: string; sub: ReactNode; button: string; go: () => void }[] = [
+    ...(transfers.data ?? []).map((o) => ({ key: `t${o.id}`, tone: 'sky', icon: <Truck className="h-7 w-7" />, title: t('Goods arriving: {route}', { route: route(o) }), sub: <Trans k="{n} units on the way. Check them when they arrive." vars={{ n: <Num>{units(o)}</Num> }} />, button: t('Receive'), go: () => onOpen({ kind: 'receive', order: o }) })),
+    ...(drafts.data ?? []).map((o) => ({ key: `d${o.id}`, tone: 'sky', icon: <ArrowLeftRight className="h-7 w-7" />, title: t('Ready to send: {route}', { route: route(o) }), sub: <Trans k="{n} units saved. Press Send when the goods leave." vars={{ n: <Num>{units(o)}</Num> }} />, button: t('Send it'), go: () => onOpen({ kind: 'receive', order: o }) })),
+    ...(outbound.data ?? []).map((o) => ({ key: `o${o.id}`, tone: 'indigo', icon: <PackageMinus className="h-7 w-7" />, title: t('Customer order #{id} is ready to check', { id: o.id }), sub: <Trans k="{n} units from {place}. Check, then confirm." vars={{ n: <Num>{units(o)}</Num>, place: lname(o.locationId) }} />, button: t('Check & confirm'), go: () => onOpen({ kind: 'outboundReview', order: o }) })),
+    ...(reserves.data ?? []).map((o) => ({ key: `r${o.id}`, tone: 'amber', icon: <Archive className="h-7 w-7" />, title: t('Stock kept aside #{id}', { id: o.id }), sub: <Trans k="{n} units at {place}. Send it out when the customer collects." vars={{ n: <Num>{units(o)}</Num>, place: lname(o.locationId) }} />, button: t('Open'), go: () => onOpen({ kind: 'reserveProcess', order: o }) })),
+    ...(inbound.data ?? []).map((o) => ({ key: `i${o.id}`, tone: 'green', icon: <Download className="h-7 w-7" />, title: t('Delivery #{id} waits for a check', { id: o.id }), sub: <Trans k="{n} units entered by {name}. Check the boxes, then approve." vars={{ n: <Num>{units(o)}</Num>, name: o.enteredBy.name }} />, button: t('Check'), go: () => onOpen({ kind: 'inboundReview', order: o }) })),
     ...(audits.data ?? []).filter((a) => a.status === 'counting').map((a) => ({ key: `a${a.id}`, tone: 'teal', icon: <ClipboardCheck className="h-7 w-7" />, title: t('Counting in progress: {name}', { name: a.name }), sub: t('Count the stock and write the numbers. Then send it for approval.'), button: t('Continue counting'), go: () => onOpen({ kind: 'audit', id: a.id }) })),
   ]
   const all = [transfers, drafts, outbound, reserves, inbound, audits]
@@ -244,7 +245,7 @@ function MyRequests({ owner }: { owner: boolean }) {
       {empty ? <Card className="p-5 text-lg text-slate-500">{t('You have not sent any requests yet.')}</Card> : (
         <ul className="space-y-3">
           {mine.map((o) => (
-            <li key={`dl${o.id}`}><Card className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-0"><p className="text-sm font-semibold text-slate-400">{t('Goods received')}</p><p className="text-lg font-bold text-slate-900">{t('Delivery #{id}', { id: o.id })}{o.reference ? ` · ${o.reference}` : ''}</p><p className="text-base text-slate-600">{t('{n} units - a manager must check the boxes', { n: fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0)) })}</p><p className="mt-1 text-sm text-slate-400">{fmtDate(o.enteredBy.at)}</p></div><Badge tone="amber"><span className="me-1.5 inline-flex"><Clock className="h-5 w-5" /></span><span className="text-base">{t('Waiting for a manager')}</span></Badge></Card></li>
+            <li key={`dl${o.id}`}><Card className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-0"><p className="text-sm font-semibold text-slate-400">{t('Goods received')}</p><p className="text-lg font-bold text-slate-900">{t('Delivery #{id}', { id: o.id })}{o.reference ? ` · ${o.reference}` : ''}</p><p className="text-base text-slate-600"><Trans k="{n} units - a manager must check the boxes" vars={{ n: <Num>{fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))}</Num> }} /></p><p className="mt-1 text-sm text-slate-400">{fmtDate(o.enteredBy.at)}</p></div><Badge tone="amber"><span className="me-1.5 inline-flex"><Clock className="h-5 w-5" /></span><span className="text-base">{t('Waiting for a manager')}</span></Badge></Card></li>
           ))}
           {items.map((i) => { const w = word[i.status] ?? word.pending; return (
             <li key={`${i.type}${i.id}`}><Card className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -287,9 +288,9 @@ function Overview() {
 // ---------------------------------------------------------------- All the pop-up windows (the SAME forms as the full app)
 function Dialogs({ open, close, setOpen }: { open: Open | null; close: () => void; setOpen: (o: Open | null) => void }) {
   const { can } = useAuth(); const owner = can('approvals.manage')
-  const prods = useProducts(); const locs = useLocations()
+  const prods = useProducts(); const locs = useLocations(); const dest = useDestinations(can('transfers.view'))
   if (!open) return null
-  const loc = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? id
+  const loc = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? dest.data?.find((l) => l.id === id)?.name ?? id
   const P = prods.data ?? []
   if (open.kind === 'help') return <Help onClose={close} />
   if (open.kind === 'product') return <Modal open onClose={close} title={t('Product')} wide><ProductOverview id={open.product.id} hideBack /></Modal>

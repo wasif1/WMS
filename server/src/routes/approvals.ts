@@ -10,6 +10,7 @@ import type { Actor, Location, Product, User } from '../models.js'
 import { Inventory } from '../inventory.js'
 import { idParam, optStr, parse } from '../validation.js'
 import { productLabel } from '../catalog.js'
+import { assertLoc, canAudit, canLoc } from '../scope.js'
 
 type Kind = 'product' | 'location' | 'adjustment' | 'audit'
 const KINDS: Kind[] = ['product', 'location', 'adjustment', 'audit']
@@ -56,6 +57,8 @@ export function approvalRoutes(ctx: Ctx, inv: Inventory) {
         if (st === 'draft') continue
         if (q.status && st !== q.status) continue
         if (!owner && submitter(k, o)?.userId !== req.user!.id) continue // team members only see their own requests
+        if (k === 'adjustment' && !canLoc(req.user!, o.locationId)) continue // restricted people only see their own locations
+        if (k === 'audit' && !canAudit(req.user!, o)) continue
         out.push(present(k, o))
       }
     }
@@ -69,6 +72,8 @@ export function approvalRoutes(ctx: Ctx, inv: Inventory) {
     const id = idParam(req)
     const o = store(kind).get(id) as any
     if (!o) throw notFound('Request')
+    if (kind === 'adjustment') assertLoc(req.user!, o.locationId)
+    if (kind === 'audit' && !canAudit(req.user!, o)) throw notFound('Request')
     if (statusOf(kind, o) !== 'pending') throw conflict(T("This request has already been decided. Refresh the page to see the latest."), 'already_processed')
     const b = parse(z.object({ comment: approve ? optStr(1000) : z.string().trim().min(1, 'A reason is required').max(1000) }).strict(), req.body)
     const u = req.user!

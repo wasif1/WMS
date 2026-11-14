@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useUoms } from '@/lib/uoms'
+import NoLocationNotice from '@/components/NoLocationNotice'
 import { t, ts } from '@/i18n'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import ErrorBoundary from './ErrorBoundary'
@@ -87,7 +88,7 @@ export default function Layout() {
           <span className="flex items-center gap-1.5 font-semibold"><FileText className="h-4 w-4 text-brand-600" />{t("WMS")}</span><span className="ms-auto flex"><LanguageToggle signedIn hideLabelOnMobile /><ThemeToggle hideLabelOnMobile /></span>
         </header>
         {DEMO && <div className="bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800">{t("Demo mode: fake data in your browser only. Not the secure production backend.")}</div>}
-        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><ErrorBoundary key={loc.pathname} variant="page"><Outlet /></ErrorBoundary></main>
+        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8"><NoLocationNotice /><ErrorBoundary key={loc.pathname} variant="page"><Outlet /></ErrorBoundary></main>
       </div>
     </div>
   )

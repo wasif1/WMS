@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { t, ts } from '@/i18n'
+import { t, Trans, ts } from '@/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Archive, ArrowLeftRight, CheckCircle2, Clock, Download, PackageMinus, TrendingDown } from 'lucide-react'
 import { get } from '@/lib/api'
-import { Card, ErrorBox, Kpi, PageHeader, PageLoader } from '@/components/ui'
+import { Card, ErrorBox, Kpi, Num, PageHeader, PageLoader } from '@/components/ui'
 import { cn, fmt, fmtDate } from '@/lib/utils'
 import { useAuth } from '@/auth/AuthContext'
 
@@ -71,7 +71,7 @@ export default function Dashboard() {
         </Card>
         <Card className="p-5">
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><TrendingDown className="h-4 w-4 text-amber-500" />{t('No sales in {n} days', { n: d.noSales.days })}</h2>
-          <p className="mb-3 text-xs text-slate-500">{t('{n} active product(s) without an outbound order', { n: d.noSales.total })}</p>
+          <p className="mb-3 text-xs text-slate-500"><Trans k="{n} active product(s) without an outbound order" vars={{ n: <Num>{d.noSales.total}</Num> }} /></p>
           {d.noSales.items.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">{t("Every active product has sold recently 🎉")}</p> :
             <ul className="divide-y divide-slate-100">{d.noSales.items.map((l) => <li key={l.name} className="flex items-center justify-between gap-2 py-2.5 text-sm"><div className="min-w-0"><p className="truncate font-medium">{l.name}</p><p className="text-xs text-slate-500">{l.lastSale ? t('Last sale {when}', { when: fmtDate(l.lastSale) }) : t("Never sold")}</p></div><span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">{t('{n} on hand', { n: fmt(l.unitsOnHand) })}</span></li>)}</ul>}
           <Link to="/products" className="mt-2 block text-center text-xs font-medium text-brand-600 hover:underline">{t("View all products")}</Link>
