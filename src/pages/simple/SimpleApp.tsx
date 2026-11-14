@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { useUoms } from '@/lib/uoms'
+import NoLocationNotice from '@/components/NoLocationNotice'
 import { t } from '@/i18n'
 import LanguageToggle from '@/components/LanguageToggle'
 import { ArrowLeft, LogOut, PackageCheck, Type, UserCircle } from 'lucide-react'
@@ -33,6 +34,7 @@ export default function SimpleApp({ gated }: { gated: boolean }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl p-4 pb-16 sm:p-6">
+        <NoLocationNotice />
         <ErrorBoundary variant="page">
           {gated ? <Account /> : (
             <Routes>

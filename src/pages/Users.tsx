@@ -5,7 +5,7 @@ import { Copy, KeyRound, Lock, Plus, ShieldCheck, ShieldOff, Unlock } from 'luci
 import PermissionMatrix from '@/components/PermissionMatrix'
 import { Badge, Confirm, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast } from '@/components/ui'
 import { get, patch, post } from '@/lib/api'
-import { useAction } from '@/lib/hooks'
+import { useAction, useLocations } from '@/lib/hooks'
 import type { Me, PermDef } from '@/lib/types'
 import { fmtDate } from '@/lib/utils'
 
@@ -22,6 +22,8 @@ export default function UsersPage() {
   const meta = useQuery({ queryKey: ['perm-meta'], queryFn: () => get<{ permissions: PermDef[] }>('/users/meta') })
   const [edit, setEdit] = useState<Me | 'new' | null>(null); const [secret, setSecret] = useState<{ title: string; pw: string }>()
   const toast = useToast()
+  const allPlaces = useLocations().data
+  const placeName = (id: number) => allPlaces?.find((l) => l.id === id)?.name ?? `#${id}`
   const useUserAction = (path: (u: Me) => string, ok: string) => useAction((u: Me) => post(path(u)), { ok, invalidate: ['users'], toastError: true })
   const unlock = useUserAction((u) => `/users/${u.id}/unlock`, t('Account unlocked')), resetMfa = useUserAction((u) => `/users/${u.id}/reset-mfa`, t('Two-factor reset'))
   const reset = useAction((u: Me) => post(`/users/${u.id}/reset-password`).then((r) => ({ ...r, u })), { invalidate: ['users'], toastError: true, onSuccess: (r) => setSecret({ title: `New temporary password for ${r.u.name}`, pw: r.temporaryPassword }) })
@@ -35,7 +37,7 @@ export default function UsersPage() {
           <tr key={u.id} className="hover:bg-slate-50">
             <td className="td"><p className="font-medium">{u.name}</p><p className="text-xs text-slate-500">{u.email}</p></td>
             <td className="td">{u.role === 'super_admin' ? <Badge tone="indigo">{t("Super admin")}</Badge> : <Badge>{u.role}</Badge>} {u.simpleScreen && <Badge tone="green">{t("simple screen")}</Badge>} {!u.active && <Badge tone="red">{t("disabled")}</Badge>}</td>
-            <td className="td text-sm text-slate-600">{u.role === 'super_admin' ? t("Full access") : u.permissions.length === 1 && u.permissions[0] === 'dashboard.view' ? t("Dashboard only") : t('{n} permissions', { n: u.permissions.length })}</td>
+            <td className="td text-sm text-slate-600">{u.role === 'super_admin' ? t("Full access") : u.permissions.length === 1 && u.permissions[0] === 'dashboard.view' ? t("Dashboard only") : t('{n} permissions', { n: u.permissions.length })}{u.role !== 'super_admin' && <p className="text-xs text-slate-500">{u.locationIds === undefined ? t('All locations') : u.locationIds.length === 0 ? t('No locations') : u.locationIds.map((id) => placeName(id)).join(', ')}</p>}</td>
             <td className="td"><span className="inline-flex items-center gap-1 text-xs">{u.totpEnabled ? <><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />{t("2FA")}</> : <><ShieldOff className="h-3.5 w-3.5 text-slate-400" />{t("no 2FA")}</>}</span>{u.locked && <Badge tone="red"><Lock className="me-1 h-3 w-3" />{t("locked")}</Badge>}{u.mustChangePassword && <p className="text-xs text-amber-600">{t("must change password")}</p>}</td>
             <td className="td text-xs text-slate-500">{fmtDate(u.lastLoginAt)}</td>
             <td className="td whitespace-nowrap text-end">
@@ -62,7 +64,11 @@ export function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms
   const [name, setName] = useState(user?.name ?? ''), [email, setEmail] = useState(user?.email ?? ''), [role, setRole] = useState<Me['role']>(user?.role ?? 'user'), [active, setActive] = useState(user?.active ?? true)
   const [sel, setSel] = useState<Set<string>>(new Set(user?.role === 'super_admin' ? [] : user?.permissions ?? ['dashboard.view']))
   const [confirmSens, setConfirmSens] = useState<PermDef[] | null>(null)
-  const save = useAction(() => user ? patch(`/users/${user.id}`, { name, role, active, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }) : post('/users', { name, email, role, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }),
+  // Location access: null = no restriction (how older users behave); a set = only those locations. A new person starts with none.
+  const places = useLocations().data ?? []
+  const [placeSel, setPlaceSel] = useState<Set<number> | null>(user ? (user.locationIds ? new Set(user.locationIds) : null) : new Set())
+  const placeBody = () => (role !== 'super_admin' && placeSel ? { locationIds: [...placeSel] } : {})
+  const save = useAction(() => user ? patch(`/users/${user.id}`, { name, role, active, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple, ...placeBody() }) : post('/users', { name, email, role, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple, ...placeBody() }),
     { ok: user ? t("User updated") : undefined, invalidate: ['users'], onSuccess: (r) => { if (!user) onCreated(`User created: ${r.user.email}`, r.temporaryPassword); onClose() } })
   const isSuper = role === 'super_admin'
   // Sensitive features being NEWLY given (ones the person already had are not asked about again)
@@ -83,7 +89,7 @@ export function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms
         {isSuper ? <p className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800">{t("Super admins always have every permission, including user management, backups and real client details.")}</p> : (<>
           <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><input type="checkbox" className="mt-1 h-4 w-4" checked={simple} onChange={(e) => setSimple(e.target.checked)} /><span><b>{t("Simple one-page screen")}</b> {t("(recommended for warehouse staff)")}<br />{t("No side menu. One page with big buttons for only what this person is allowed to do, plus product search. Turn off to give them the full app.")}</span></label>
           <div><p className="label">{t("Quick presets")}</p><div className="flex flex-wrap gap-2">{PRESETS.map((p) => <button key={p.name} type="button" title={t(p.desc)} className="btn-secondary" onClick={() => { setSel(new Set(p.perms(perms))); setRole(p.role); setSimple(!!p.simple) }}>{t(p.name)}</button>)}<button type="button" className="btn-ghost" onClick={() => setSel(new Set())}>{t("Clear")}</button></div></div>
-          <PermissionMatrix perms={perms} sel={sel} onChange={setSel} />
+          <PermissionMatrix perms={perms} sel={sel} onChange={setSel} places={places.map((l) => ({ id: l.id, name: l.name }))} placeSel={placeSel ?? new Set(places.map((l) => l.id))} onPlaceChange={setPlaceSel} unrestricted={placeSel === null} />
         </>)}
         <ErrorBox error={save.error} />
         <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>{t("Cancel")}</button><button className="btn-primary" disabled={!name.trim() || (!user && !email.trim()) || save.isPending} onClick={trySave}>{save.isPending && <Spinner />}{user ? t("Save changes") : t("Create user")}</button></div>

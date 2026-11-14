@@ -4,7 +4,7 @@ import { AlertTriangle, Archive, ArrowLeftRight, BarChart3, CheckCircle2, Chevro
 import { useAuth } from '@/auth/AuthContext'
 import { Badge, Card, Empty, ErrorBox, Modal, Num, PageLoader } from '@/components/ui'
 import { get } from '@/lib/api'
-import { useLocations, useProducts } from '@/lib/hooks'
+import { useDestinations, useLocations, useProducts } from '@/lib/hooks'
 import { hasOwnerWorkflow, matchProduct, stockLevel, summarizeStock, tilesFor, type StockLevel, type TileId } from '@/lib/operator'
 import { variationOf } from '@/lib/catalog'
 import type { Product, StockRow } from '@/lib/types'
@@ -183,7 +183,8 @@ function ProductCard({ p, s, L, onOpen }: { p: Product; s: ReturnType<typeof sum
 // ---------------------------------------------------------------- Things waiting for me
 function TodoList({ onOpen }: { onOpen: (o: Open) => void }) {
   const { can } = useAuth(); const locs = useLocations()
-  const lname = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? '…'
+  const dest = useDestinations(can('transfers.view'))
+  const lname = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? dest.data?.find((l) => l.id === id)?.name ?? '…'
   const units = (o: any) => fmt(o.lines.reduce((a: number, l: any) => a + l.qty, 0))
   const both = (a: boolean, b: boolean) => a && b
   const transfers = useQuery({ queryKey: ['transfers', 'todo'], queryFn: () => get<any[]>('/transfers?status=in_transit'), enabled: both(can('transfers.view'), can('transfers.receive')) })
@@ -287,9 +288,9 @@ function Overview() {
 // ---------------------------------------------------------------- All the pop-up windows (the SAME forms as the full app)
 function Dialogs({ open, close, setOpen }: { open: Open | null; close: () => void; setOpen: (o: Open | null) => void }) {
   const { can } = useAuth(); const owner = can('approvals.manage')
-  const prods = useProducts(); const locs = useLocations()
+  const prods = useProducts(); const locs = useLocations(); const dest = useDestinations(can('transfers.view'))
   if (!open) return null
-  const loc = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? id
+  const loc = (id: number) => locs.data?.find((l) => l.id === id)?.name ?? dest.data?.find((l) => l.id === id)?.name ?? id
   const P = prods.data ?? []
   if (open.kind === 'help') return <Help onClose={close} />
   if (open.kind === 'product') return <Modal open onClose={close} title={t('Product')} wide><ProductOverview id={open.product.id} hideBack /></Modal>

@@ -9,6 +9,7 @@ import { wrap } from '../http.js'
 import type { Client, Line, Location, Movement, Product, Stock, User } from '../models.js'
 import { Inventory } from '../inventory.js'
 import { idParam } from '../validation.js'
+import { assertLoc, canAudit, canLoc } from '../scope.js'
 
 /** Neutralise spreadsheet formula injection in exports (OWASP CSV injection). */
 const cell = (v: unknown) => {
@@ -36,25 +37,33 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
   const DAY = 86_400_000
   r.get('/dashboard', requirePerm('dashboard.view'), wrap((req, res) => {
     const { period } = z.object({ period: z.enum(['week', 'month', 'year']).default('month') }).parse(req.query)
-    const P = products(), L = locations()
+    const P = products(), L = locations(), me = req.user!
+    // a restricted person's numbers only cover the locations they may use
+    const S = {
+      inbound: (ctx.db.inbound_orders.all() as any[]).filter((o) => canLoc(me, o.locationId)),
+      outbound: (ctx.db.outbound_orders.all() as any[]).filter((o) => canLoc(me, o.locationId)),
+      reserve: (ctx.db.reserve_orders.all() as any[]).filter((o) => canLoc(me, o.locationId)),
+      transfer: (ctx.db.transfer_orders.all() as any[]).filter((o) => canLoc(me, o.fromLocationId) || canLoc(me, o.toLocationId)),
+    }
     const now = Date.now(), span = { week: 7, month: 30, year: 365 }[period]
     const since = now - span * DAY
     const inWin = (iso?: string, from = since) => !!iso && Date.parse(iso) >= from
     const rows = {
-      inbound: (ctx.db.inbound_orders.all() as any[]).filter((o) => o.status !== 'rejected'),
-      outbound: (ctx.db.outbound_orders.all() as any[]).filter((o) => o.status !== 'cancelled'),
-      reserve: (ctx.db.reserve_orders.all() as any[]).filter((o) => o.status !== 'cancelled'),
-      transfer: (ctx.db.transfer_orders.all() as any[]).filter((o) => o.status !== 'cancelled'),
+      inbound: S.inbound.filter((o) => o.status !== 'rejected'),
+      outbound: S.outbound.filter((o) => o.status !== 'cancelled'),
+      reserve: S.reserve.filter((o) => o.status !== 'cancelled'),
+      transfer: S.transfer.filter((o) => o.status !== 'cancelled'),
     }
     const created = (o: any) => (o.enteredBy ?? o.createdBy).at as string
     const win = (k: keyof typeof rows) => rows[k].filter((o) => inWin(created(o)))
     const completedIn = [
-      ...(ctx.db.inbound_orders.all() as any[]).filter((o) => o.status === 'approved').map((o) => o.decidedBy?.at),
-      ...(ctx.db.transfer_orders.all() as any[]).filter((o) => o.status === 'received').map((o) => o.receivedBy?.at),
-      ...(ctx.db.outbound_orders.all() as any[]).filter((o) => o.status === 'confirmed').map((o) => o.confirmedBy?.at),
-      ...(ctx.db.reserve_orders.all() as any[]).filter((o) => o.status === 'converted').map((o) => o.closedBy?.at),
+      ...S.inbound.filter((o) => o.status === 'approved').map((o) => o.decidedBy?.at),
+      ...S.transfer.filter((o) => o.status === 'received').map((o) => o.receivedBy?.at),
+      ...S.outbound.filter((o) => o.status === 'confirmed').map((o) => o.confirmedBy?.at),
+      ...S.reserve.filter((o) => o.status === 'converted').map((o) => o.closedBy?.at),
     ].filter((at) => inWin(at)).length
-    const pendingApprovals = [ctx.db.products, ctx.db.locations, ctx.db.adjustments].reduce((n, st) => n + (st.all() as any[]).filter((o) => o.status === 'pending').length, 0) + (ctx.db.audits.all() as any[]).filter((a) => a.status === 'submitted').length
+    const pendingApprovals = [ctx.db.products, ctx.db.locations].reduce((n, st) => n + (st.all() as any[]).filter((o) => o.status === 'pending').length, 0)
+      + (ctx.db.adjustments.all() as any[]).filter((o) => o.status === 'pending' && canLoc(me, o.locationId)).length + (ctx.db.audits.all() as any[]).filter((a) => a.status === 'submitted' && canAudit(me, a)).length
     const pending = {
       inboundApproval: rows.inbound.filter((o) => o.status === 'pending').length,
       outboundToConfirm: rows.outbound.filter((o) => o.status === 'saved').length,
@@ -72,7 +81,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
     bump('inbound', rows.inbound); bump('outbound', rows.outbound); bump('transfers', rows.transfer); bump('reserved', rows.reserve)
 
     // orders by location (counts)
-    const byLocation = [...L.values()].filter((l) => l.active).map((l) => ({
+    const byLocation = [...L.values()].filter((l) => l.active && canLoc(me, l.id)).map((l) => ({
       name: l.name,
       inbound: win('inbound').filter((o) => o.locationId === l.id).length,
       outbound: win('outbound').filter((o) => o.locationId === l.id).length,
@@ -91,7 +100,8 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
     const since30 = now - 30 * DAY
     const sold = new Set<number>(); const lastSale = new Map<number, string>()
     for (const o of rows.outbound) for (const l of o.lines as Line[]) { if (inWin(created(o), since30)) sold.add(l.productId); const prev = lastSale.get(l.productId); if (!prev || created(o) > prev) lastSale.set(l.productId, created(o)) }
-    const totals = inv.totals()
+    const totals = new Map<number, { onHand: number }>() // units on hand, over the locations this person may use
+    for (const s of ctx.db.stock.all() as Stock[]) if (canLoc(me, s.locationId)) totals.set(s.productId, { onHand: (totals.get(s.productId)?.onHand ?? 0) + s.onHand })
     const noSales = [...P.values()].filter((p) => p.active && isApproved(p) && !sold.has(p.id)).map((p) => ({ name: productLabel(p), unitsOnHand: totals.get(p.id)?.onHand ?? 0, lastSale: lastSale.get(p.id) ?? null }))
 
     res.json({
@@ -112,8 +122,9 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
     const q = z.object({ locationId: z.coerce.number().int().positive().optional() }).parse(req.query)
     const L = locations(), U = new Map((ctx.db.users.all() as User[]).map((u) => [u.id, u.name]))
     const A = new Map((ctx.db.audits.all() as any[]).map((a) => [a.id, a.name as string]))
-    const stock = (ctx.db.stock.all() as Stock[]).filter((s) => s.productId === id)
-    const moves = (ctx.db.movements.all() as Movement[]).filter((m) => m.productId === id && (!q.locationId || m.locationId === q.locationId)).reverse().slice(0, 200)
+    if (q.locationId) assertLoc(req.user!, q.locationId)
+    const stock = (ctx.db.stock.all() as Stock[]).filter((s) => s.productId === id && canLoc(req.user!, s.locationId))
+    const moves = (ctx.db.movements.all() as Movement[]).filter((m) => m.productId === id && canLoc(req.user!, m.locationId) && (!q.locationId || m.locationId === q.locationId)).reverse().slice(0, 200)
     const refName = (m: Movement) => (m.refType === 'audit' ? A.get(m.refId ?? -1) : undefined)
     // Units on the way: counted at the DESTINATION while the transfer is in transit, and gone again once it is received.
     const transit = new Map<number, { qty: number; from: Set<string> }>()
@@ -126,7 +137,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
       }
     }
     const stockLocs = new Set(stock.map((s) => s.locationId))
-    const base = [...stock, ...[...transit.keys()].filter((lid) => !stockLocs.has(lid)).map((lid) => ({ locationId: lid, onHand: 0, reserved: 0 }))]
+    const base = [...stock, ...[...transit.keys()].filter((lid) => !stockLocs.has(lid) && canLoc(req.user!, lid)).map((lid) => ({ locationId: lid, onHand: 0, reserved: 0 }))]
     const rowsByLoc = base.map((s) => ({ locationId: s.locationId, location: L.get(s.locationId)?.name, onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null, inTransit: transit.get(s.locationId)?.qty ?? 0, inTransitFrom: [...(transit.get(s.locationId)?.from ?? [])] }))
     const totalAvail = rowsByLoc.reduce((a, r2) => a + r2.available, 0)
     // "Action by": who actually did it (entered / submitted / sent / received / confirmed / closed). "Approved by" stays the person whose click posted the movement.
@@ -155,7 +166,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
   r.get('/reports/inventory', requirePerm('reports.inventory'), wrap((req, res) => {
     const q = z.object({ locationId: z.coerce.number().int().optional(), format: z.enum(['json', 'csv']).default('json') }).parse(req.query)
     const P = products(), L = locations()
-    const rows = (ctx.db.stock.all() as Stock[]).filter((s) => !q.locationId || s.locationId === q.locationId).map((s) => {
+    const rows = (ctx.db.stock.all() as Stock[]).filter((s) => canLoc(req.user!, s.locationId) && (!q.locationId || s.locationId === q.locationId)).map((s) => {
       const p = P.get(s.productId)
       return { SKU: p?.sku, Product: p?.name ?? p?.sku, Variation: p ? variationOf(p) : '', Weight: p?.weight ?? '', Location: L.get(s.locationId)?.name, 'Case pack': p?.caseSize ?? '', UOM: p?.uom, 'On hand': s.onHand, Reserved: s.reserved, Available: s.onHand - s.reserved, Boxes: p?.caseSize ? Math.ceil(s.onHand / p.caseSize) : '' }
     })
@@ -174,7 +185,7 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
       ['outbound', ctx.db.outbound_orders.all(), (o) => o.createdBy.at, (o) => L.get(o.locationId)?.name ?? ''],
     ]
     const rows = sets.filter(([t]) => !q.type || q.type === t).flatMap(([t, all, at, loc]) =>
-      all.filter((o: any) => (!q.status || o.status === q.status) && (!q.clientId || o.clientId === q.clientId) &&
+      all.filter((o: any) => (o.fromLocationId !== undefined ? canLoc(req.user!, o.fromLocationId) || canLoc(req.user!, o.toLocationId) : canLoc(req.user!, o.locationId)) && (!q.status || o.status === q.status) && (!q.clientId || o.clientId === q.clientId) &&
         (!q.locationId || [o.locationId, o.fromLocationId, o.toLocationId].includes(q.locationId)) && (!q.from || at(o).slice(0, 10) >= q.from) && (!q.to || at(o).slice(0, 10) <= q.to))
         .map((o: any) => ({ Type: t, Number: o.id, Date: at(o), Status: o.status, Location: loc(o), Client: o.clientId ? (reveal ? C.get(o.clientId)?.name : C.get(o.clientId)?.alias) : '', Lines: o.lines.length, Units: o.lines.reduce((a: number, l: Line) => a + l.qty, 0), 'Created by': (o.createdBy ?? o.enteredBy).name })))
       .sort((a, b) => b.Date.localeCompare(a.Date))
