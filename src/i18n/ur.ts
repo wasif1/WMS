@@ -800,9 +800,6 @@ export const ur: Record<string, string> = {
   "{n} sensitive": "{n} حساس",
   "{n} of {total} allowed": "{total} میں سے {n} کی اجازت",
   "No access": "رسائی نہیں",
-  "Feature": "سہولت",
-  "Clear this section": "اس حصے کو صاف کریں",
-  "Select all in this section": "اس حصے میں سب منتخب کریں",
   "Give sensitive access?": "حساس رسائی دیں؟",
   "Yes, give access and save": "جی ہاں، رسائی دیں اور محفوظ کریں",
   "You are giving {name} access to these sensitive features:": "آپ {name} کو ان حساس سہولیات تک رسائی دے رہے ہیں:",
@@ -811,4 +808,5 @@ export const ur: Record<string, string> = {
   "from {place}": "{place} سے",
   "Action by": "کارروائی کرنے والا",
   "Total inventory": "کل انوینٹری",
+  "Custom": "حسبِ ضرورت",
 }

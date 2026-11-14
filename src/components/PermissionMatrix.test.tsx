@@ -25,18 +25,36 @@ function Harness({ start = [] as string[] }) {
   return <><PermissionMatrix perms={PERMS} sel={sel} onChange={setSel} /><output data-testid="sel">{[...sel].sort().join(',')}</output></>
 }
 
-describe('permission matrix', () => {
-  it('shows only the main heads until one is opened', async () => {
+const tone = (name: string) => screen.getByRole('radio', { name }).parentElement!.querySelector('[data-tone]')?.getAttribute('data-tone') ?? null
+
+describe('permission table', () => {
+  it('always shows the column names; the details of a head show only once it is opened', async () => {
     render(<Harness />)
-    expect(screen.getAllByRole('button', { expanded: false }).map((b) => b.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Products'), expect.stringContaining('Inbound'), expect.stringContaining('Administration')]))
-    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['What this person can do', 'None', 'View', 'View & Edit', 'Admin'])
+    expect(screen.getByRole('button', { name: /Products/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Add new products')).toBeNull() // detail row hidden
+    expect(screen.getByRole('radio', { name: 'Products: None' })).toBeChecked() // the head itself has radios
     await userEvent.click(screen.getByRole('button', { name: /Products/ }))
-    const table = screen.getByRole('table')
-    expect(within(table).getByText('Add new products')).toBeInTheDocument()
+    expect(screen.getByText('Add new products')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Products/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5) // still the same single header
   })
 
-  it('each feature is None or its own level; picking a level switches that one permission only', async () => {
+  it('a head sets all of its features at once: View, View & Edit, Admin, None', async () => {
+    render(<Harness />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Inbound: View' }))
+    expect(screen.getByTestId('sel')).toHaveTextContent(/^inbound.view$/)
+    await userEvent.click(screen.getByRole('radio', { name: 'Inbound: Admin' }))
+    expect(screen.getByTestId('sel')).toHaveTextContent('inbound.approve,inbound.view') // everything incl. the sensitive one
+    expect(screen.queryByRole('radio', { name: 'Products: Admin' })).toBeNull() // no sensitive feature there -> no Admin choice
+    await userEvent.click(screen.getByRole('radio', { name: 'Products: View & Edit' }))
+    expect(screen.getByTestId('sel')).toHaveTextContent('inbound.approve,inbound.view,products.create,products.view')
+    await userEvent.click(screen.getByRole('radio', { name: 'Inbound: None' }))
+    expect(screen.getByTestId('sel')).toHaveTextContent('products.create,products.view')
+  })
+
+  it('each detailed feature is None or its own level; picking one changes that permission only', async () => {
     render(<Harness start={['products.view']} />)
     await userEvent.click(screen.getByRole('button', { name: /Products/ }))
     expect(screen.getByRole('radio', { name: 'View products & product pages: View' })).toBeChecked()
@@ -47,26 +65,28 @@ describe('permission matrix', () => {
     expect(screen.getByTestId('sel')).toHaveTextContent(/^products.create$/)
   })
 
-  it('dots: grey = default, blue = access given, red = sensitive', async () => {
-    const { container } = render(<Harness />)
-    await userEvent.click(screen.getByRole('button', { name: /Products/ })); await userEvent.click(screen.getByRole('button', { name: /Inbound/ }))
-    expect(container.querySelectorAll('[data-tone="grey"]').length).toBe(4) // every row starts on None
-    await userEvent.click(screen.getByRole('radio', { name: 'Add new products: View & Edit' }))
-    expect(container.querySelectorAll('[data-tone="blue"]').length).toBe(1)
-    await userEvent.click(screen.getByRole('radio', { name: 'Approve inbound orders: Admin' }))
-    expect(container.querySelectorAll('[data-tone="red"]').length).toBe(1)
-    expect(screen.getByText('1 sensitive')).toBeInTheDocument()
+  it('a head that matches none of its levels shows "Custom" with no level picked', async () => {
+    render(<Harness start={['products.create']} />)
+    expect(screen.getByRole('button', { name: /Products/ })).toHaveTextContent('Custom')
+    for (const lv of ['None', 'View', 'View & Edit']) expect(screen.getByRole('radio', { name: `Products: ${lv}` })).not.toBeChecked()
   })
 
-  it('summarises each head and can select / clear a whole section', async () => {
+  it('dots: grey = default, blue = access given, red = sensitive', async () => {
+    render(<Harness />)
+    await userEvent.click(screen.getByRole('button', { name: /Inbound/ }))
+    expect(tone('Inbound: None')).toBe('grey'); expect(tone('Approve inbound orders: None')).toBe('grey')
+    await userEvent.click(screen.getByRole('radio', { name: 'View inbound orders: View' }))
+    expect(tone('View inbound orders: View')).toBe('blue'); expect(tone('Inbound: View')).toBe('blue')
+    await userEvent.click(screen.getByRole('radio', { name: 'Approve inbound orders: Admin' }))
+    expect(tone('Approve inbound orders: Admin')).toBe('red')
+    expect(screen.getByText('1 sensitive')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Inbound: Admin' })); expect(tone('Inbound: Admin')).toBe('red')
+  })
+
+  it('summarises each head', async () => {
     render(<Harness start={['inbound.view']} />)
     expect(screen.getByRole('button', { name: /Inbound/ })).toHaveTextContent('1 of 2 allowed')
     expect(screen.getByRole('button', { name: /Products/ })).toHaveTextContent('No access')
-    await userEvent.click(screen.getByRole('button', { name: /Products/ }))
-    await userEvent.click(screen.getByRole('button', { name: 'Select all in this section' }))
-    expect(screen.getByTestId('sel')).toHaveTextContent('inbound.view,products.create,products.view')
-    await userEvent.click(screen.getByRole('button', { name: 'Clear this section' }))
-    expect(screen.getByTestId('sel')).toHaveTextContent(/^inbound.view$/)
   })
 })
 
@@ -77,8 +97,7 @@ describe('add / edit user: sensitive access is confirmed before saving', () => {
 
   it('asks first, names the sensitive feature, and saves only after "Yes"', async () => {
     renderForm(); await fill()
-    await userEvent.click(screen.getByRole('button', { name: /Inbound/ }))
-    await userEvent.click(screen.getByRole('radio', { name: 'Approve inbound orders: Admin' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Inbound: Admin' })) // the head: everything in Inbound incl. the sensitive approve
     await userEvent.click(screen.getByRole('button', { name: 'Create user' }))
     const dlg = await screen.findByRole('dialog', { name: 'Give sensitive access?' })
     expect(within(dlg).getByText('Approve inbound orders')).toBeInTheDocument(); expect(within(dlg).getByText(/Mia/)).toBeInTheDocument()
