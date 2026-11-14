@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { t, ts } from '@/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Copy, KeyRound, Lock, Plus, ShieldCheck, ShieldOff, Unlock } from 'lucide-react'
-import { Badge, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast } from '@/components/ui'
+import PermissionMatrix from '@/components/PermissionMatrix'
+import { Badge, Confirm, Empty, ErrorBox, Field, Modal, PageHeader, PageLoader, Spinner, Table, useToast } from '@/components/ui'
 import { get, patch, post } from '@/lib/api'
 import { useAction } from '@/lib/hooks'
 import type { Me, PermDef } from '@/lib/types'
@@ -56,17 +57,22 @@ export default function UsersPage() {
   )
 }
 
-function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms: PermDef[]; onClose: () => void; onCreated: (t: string, pw: string) => void }) {
+export function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms: PermDef[]; onClose: () => void; onCreated: (t: string, pw: string) => void }) {
   const [simple, setSimple] = useState(user?.simpleScreen ?? false)
   const [name, setName] = useState(user?.name ?? ''), [email, setEmail] = useState(user?.email ?? ''), [role, setRole] = useState<Me['role']>(user?.role ?? 'user'), [active, setActive] = useState(user?.active ?? true)
   const [sel, setSel] = useState<Set<string>>(new Set(user?.role === 'super_admin' ? [] : user?.permissions ?? ['dashboard.view']))
-  const modules = [...new Set(perms.map((p) => p.module))]
-  const toggle = (k: string) => setSel((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
+  const [confirmSens, setConfirmSens] = useState<PermDef[] | null>(null)
   const save = useAction(() => user ? patch(`/users/${user.id}`, { name, role, active, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }) : post('/users', { name, email, role, permissions: [...sel], simpleScreen: role !== 'super_admin' && simple }),
     { ok: user ? t("User updated") : undefined, invalidate: ['users'], onSuccess: (r) => { if (!user) onCreated(`User created: ${r.user.email}`, r.temporaryPassword); onClose() } })
   const isSuper = role === 'super_admin'
+  // Sensitive features being NEWLY given (ones the person already had are not asked about again)
+  const trySave = () => {
+    const fresh = isSuper ? [] : perms.filter((p) => p.sensitive && sel.has(p.key) && !(user?.permissions ?? []).includes(p.key))
+    if (fresh.length) setConfirmSens(fresh); else save.mutate(undefined)
+  }
   return (
-    <Modal open onClose={onClose} title={user ? t('Edit {name}', { name: user.name }) : t("Add user")} wide>
+    <>
+    <Modal open onClose={() => { if (!confirmSens) onClose() }} title={user ? t('Edit {name}', { name: user.name }) : t("Add user")} wide>
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label={t("Full name")}><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
@@ -77,15 +83,14 @@ function UserForm({ user, perms, onClose, onCreated }: { user?: Me; perms: PermD
         {isSuper ? <p className="rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800">{t("Super admins always have every permission, including user management, backups and real client details.")}</p> : (<>
           <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"><input type="checkbox" className="mt-1 h-4 w-4" checked={simple} onChange={(e) => setSimple(e.target.checked)} /><span><b>{t("Simple one-page screen")}</b> {t("(recommended for warehouse staff)")}<br />{t("No side menu. One page with big buttons for only what this person is allowed to do, plus product search. Turn off to give them the full app.")}</span></label>
           <div><p className="label">{t("Quick presets")}</p><div className="flex flex-wrap gap-2">{PRESETS.map((p) => <button key={p.name} type="button" title={t(p.desc)} className="btn-secondary" onClick={() => { setSel(new Set(p.perms(perms))); setRole(p.role); setSimple(!!p.simple) }}>{t(p.name)}</button>)}<button type="button" className="btn-ghost" onClick={() => setSel(new Set())}>{t("Clear")}</button></div></div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {modules.map((m) => { const ps = perms.filter((p) => p.module === m); const all = ps.every((p) => sel.has(p.key)); return (
-              <fieldset key={m} className="rounded-lg border border-slate-200 p-3"><legend className="flex items-center gap-2 px-1 text-sm font-semibold">{m}<button type="button" className="text-xs font-normal text-brand-600 hover:underline" onClick={() => setSel((s) => { const n = new Set(s); ps.forEach((p) => all ? n.delete(p.key) : n.add(p.key)); return n })}>{all ? t("none") : t("all")}</button></legend>
-                {ps.map((p) => <label key={p.key} className="flex items-start gap-2 py-1 text-sm"><input type="checkbox" className="mt-0.5" checked={sel.has(p.key)} onChange={() => toggle(p.key)} /><span>{p.label}{p.sensitive && <Badge tone="amber">{t("sensitive")}</Badge>}</span></label>)}</fieldset>) })}
-          </div>
+          <PermissionMatrix perms={perms} sel={sel} onChange={setSel} />
         </>)}
         <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>{t("Cancel")}</button><button className="btn-primary" disabled={!name.trim() || (!user && !email.trim()) || save.isPending} onClick={() => save.mutate(undefined)}>{save.isPending && <Spinner />}{user ? t("Save changes") : t("Create user")}</button></div>
+        <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose}>{t("Cancel")}</button><button className="btn-primary" disabled={!name.trim() || (!user && !email.trim()) || save.isPending} onClick={trySave}>{save.isPending && <Spinner />}{user ? t("Save changes") : t("Create user")}</button></div>
       </div>
     </Modal>
+      <Confirm open={!!confirmSens} danger busy={save.isPending} title={t('Give sensitive access?')} confirmLabel={t('Yes, give access and save')} onClose={() => setConfirmSens(null)} onConfirm={() => save.mutate(undefined, { onSettled: () => setConfirmSens(null) })}
+        message={<div className="space-y-3"><p>{t('You are giving {name} access to these sensitive features:', { name: name.trim() })}</p><ul className="space-y-2">{confirmSens?.map((p) => <li key={p.key} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5"><i className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" /><span><b className="text-red-800">{t(p.label)}</b><br /><span className="text-xs text-red-700">{t(p.module)}</span></span></li>)}</ul><p>{t('Only continue if you trust this person with these.')}</p></div>} />
+    </>
   )
 }
