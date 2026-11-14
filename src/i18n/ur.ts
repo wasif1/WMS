@@ -517,7 +517,6 @@ export const ur: Record<string, string> = {
   "SKU {sku}": "SKU {sku}",
   "Availability by location": "مقام کے لحاظ سے دستیابی",
   "On hand": "موجود",
-  "Total units available": "کل دستیاب یونٹس",
   "Total boxes": "کل ڈبے",
   "All locations": "تمام مقامات",
   "No stock at any location.": "کسی جگہ اسٹاک نہیں۔",
@@ -808,4 +807,8 @@ export const ur: Record<string, string> = {
   "Yes, give access and save": "جی ہاں، رسائی دیں اور محفوظ کریں",
   "You are giving {name} access to these sensitive features:": "آپ {name} کو ان حساس سہولیات تک رسائی دے رہے ہیں:",
   "Only continue if you trust this person with these.": "صرف تب آگے بڑھیں جب آپ اس شخص پر ان کے لیے بھروسہ کرتے ہوں۔",
+  "In Transit": "راستے میں",
+  "from {place}": "{place} سے",
+  "Action by": "کارروائی کرنے والا",
+  "Total inventory": "کل انوینٹری",
 }
