@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useUoms } from '@/lib/uoms'
 import { moveLabel, uomShort } from '@/i18n/labels'
 import { movementRef } from '@/i18n/describe'
-import { t, ts } from '@/i18n'
+import { t, Trans, ts } from '@/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { get } from '@/lib/api'
-import { Badge, Card, Empty, ErrorBox, PageHeader, PageLoader } from '@/components/ui'
+import { Badge, Card, Empty, ErrorBox, Num, PageHeader, PageLoader } from '@/components/ui'
 import { fmt, fmtDate } from '@/lib/utils'
 import { productLabel, variationOf } from '@/lib/catalog'
 import type { Product } from '@/lib/types'
@@ -36,7 +36,7 @@ export function ProductOverview({ id, hideBack }: { id?: string | number; hideBa
   return (
     <>
       {!hideBack && <Link to="/products" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4 rtl:rotate-180" />{t("Products")}</Link>}
-      <PageHeader title={productLabel(p)} subtitle={[variationOf(p), p.weight, p.caseSize ? t('case pack {n}', { n: p.caseSize }) : t('sold loose'), t('measured in {u}', { u: uomShort(p.uom) }), t('SKU {sku}', { sku: p.sku })].filter(Boolean).join(' · ')} actions={p.active ? <Badge tone="green">{t("Active")}</Badge> : <Badge>{t("Inactive")}</Badge>} />
+      <PageHeader title={productLabel(p)} subtitle={<>{[variationOf(p), p.weight, p.caseSize ? <Trans key="cp" k="case pack {n}" vars={{ n: <Num>{p.caseSize}</Num> }} /> : t('sold loose'), t('measured in {u}', { u: uomShort(p.uom) }), t('SKU {sku}', { sku: p.sku })].filter(Boolean).flatMap((x, i) => (i ? [' · ', x] : [x])).map((x, i) => <Fragment key={i}>{x}</Fragment>)}</>} actions={p.active ? <Badge tone="green">{t("Active")}</Badge> : <Badge>{t("Inactive")}</Badge>} />
 
       <h2 className="mb-3 text-sm font-semibold">{t("Availability by location")}</h2>
       <Card className="overflow-x-auto">

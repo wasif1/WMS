@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { t, Trans } from '@/i18n'
+import { Num } from '@/components/ui'
 import { uomDecimals, uomShort, useUoms } from '@/lib/uoms'
 import type { Product, StockRow } from '@/lib/types'
 import { fmt } from '@/lib/utils'
@@ -31,7 +32,7 @@ export default function LinesEditor({ lines, onChange, products, stock, checkSto
                 <option value="">{t("Select product…")}</option>
                 {products.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{productLabel(x)}{x.weight ? ` · ${x.weight}` : ''}</option>)}
               </select>
-              {p && <p className="mt-1 text-xs text-slate-500">{p.caseSize ? t('Case pack {n}', { n: p.caseSize }) : t("No case pack (loose)")} · {uomShort(p.uom)}{a !== undefined && stock ? <> · <span className={over ? 'font-medium text-red-600' : ''}><Trans k="available here: {n}" vars={{ n: fmt(a) }} /></span></> : null}</p>}
+              {p && <p className="mt-1 text-xs text-slate-500">{p.caseSize ? <Trans k="Case pack {n}" vars={{ n: <Num>{p.caseSize}</Num> }} /> : t("No case pack (loose)")} · {uomShort(p.uom)}{a !== undefined && stock ? <> · <span className={over ? 'font-medium text-red-600' : ''}><Trans k="available here: {n}" vars={{ n: over ? fmt(a) : <Num>{fmt(a)}</Num> }} /></span></> : null}</p>}
             </div>
             <input className="input col-span-4 sm:col-span-2" type="number" min={0} step={1} disabled={!!p && !p.caseSize} title={p && !p.caseSize ? t("This product has no case pack") : undefined} value={l.cases || ''} placeholder="0" onChange={(e) => set(i, { cases: Number(e.target.value) })} aria-label={t("Cases")} />
             <input className="input col-span-4 sm:col-span-2" type="number" min={0} step={p && uomDecimals(p.uom) ? 0.001 : 1} value={l.loose || ''} placeholder="0" onChange={(e) => set(i, { loose: Number(e.target.value) })} aria-label={t("Loose units")} />

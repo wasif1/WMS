@@ -50,7 +50,7 @@ describe('operator single-page screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show all products' })); expect(await screen.findByText('Cotton T-Shirt')).toBeInTheDocument()
     await userEvent.type(box, 'rice'); expect(screen.getByText('Basmati Rice')).toBeInTheDocument(); expect(screen.queryByText('Cotton T-Shirt')).toBeNull()
     await userEvent.clear(box); await userEvent.type(box, 'cot-bla-l'); expect(screen.getByText('Cotton T-Shirt')).toBeInTheDocument(); expect(screen.getByText('Code: COT-BLA-L-0001')).toBeInTheDocument()
-    expect(screen.getByText('Karachi Main:')).toBeInTheDocument(); expect(screen.getByText('120')).toBeInTheDocument(); expect(screen.getByText(/≈ 5 boxes/)).toBeInTheDocument()
+    expect(screen.getByText('Karachi Main:')).toBeInTheDocument(); expect(screen.getByText('120')).toBeInTheDocument(); const boxes = screen.getByText('5', { selector: 'b' }); expect(boxes.parentElement).toHaveTextContent('≈ 5 boxes'); expect(boxes).toHaveClass('font-bold') // numbers in hints are bold
     await userEvent.clear(box); await userEvent.type(box, 'black cotton'); expect(screen.getByText('Cotton T-Shirt')).toBeInTheDocument()
     await userEvent.clear(box); await userEvent.type(box, 'zzzz'); expect(screen.getByText(/Nothing found/)).toBeInTheDocument()
   })

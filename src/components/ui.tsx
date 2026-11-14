@@ -5,10 +5,12 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, WifiOff, X } fro
 import { describeError, errorLine } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
+/** A number inside a sentence of helper text: bold and in the darkest text colour so it stands out (also readable in dark mode). */
+export const Num = ({ children }: { children: ReactNode }) => <b className="font-bold text-slate-900">{children}</b>
 export const Spinner = ({ className }: { className?: string }) => <Loader2 className={cn('h-4 w-4 animate-spin', className)} />
 export const PageLoader = () => <div className="flex justify-center py-20 text-slate-400"><Spinner className="h-6 w-6" /></div>
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>{subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}</div>
