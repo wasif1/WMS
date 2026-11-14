@@ -5,7 +5,7 @@ import { T, list, type Msg } from './i18n/index.js'
 
 const LABELS: Record<string, string> = {
   productId: 'Product', locationId: 'Location', fromLocationId: 'Source location', toLocationId: 'Destination location', clientId: 'Client',
-  newQty: 'Correct physical quantity', reason: 'Reason', comment: 'Comment', comments: 'Comments', note: 'Note', name: 'Name', email: 'Email',
+  newQty: 'Correct physical quantity', reason: 'Reason', comment: 'Comment', comments: 'Comments', note: 'Note', name: 'Name', short: 'Short name', decimals: 'Allow decimals', email: 'Email',
   password: 'Password', currentPassword: 'Current password', newPassword: 'New password', caseSize: 'Case pack', reorderLevel: 'Reorder level',
   cases: 'Cases', loose: 'Loose units', lines: 'Products', counts: 'Counts', counted: 'Count', address: 'Address', contact: 'Contact', role: 'Role',
   permissions: 'Permissions', uom: 'Measured by', weight: 'Weight', size: 'Size', color: 'Colour', description: 'Details', reference: 'Reference',

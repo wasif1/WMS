@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUoms } from '@/lib/uoms'
 import { t, ts } from '@/i18n'
 import { approvalSummary } from '@/i18n/describe'
 import { useQuery } from '@tanstack/react-query'
@@ -13,6 +14,7 @@ interface Item { type: 'product' | 'location' | 'adjustment' | 'audit'; id: numb
 const TYPE: Record<Item['type'], string> = { product: ts('New product'), location: ts('New location'), adjustment: ts('Stock adjustment'), audit: ts('Inventory audit') }
 
 export default function Approvals() {
+  useUoms() // keep unit names / decimal rules fresh after the super admin changes them
   const { can } = useAuth()
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected' | ''>('pending')
   const [rejecting, setRejecting] = useState<Item | null>(null)

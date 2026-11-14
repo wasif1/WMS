@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUoms } from '@/lib/uoms'
 import { moveLabel, uomShort } from '@/i18n/labels'
 import { movementRef } from '@/i18n/describe'
 import { t, ts } from '@/i18n'
@@ -20,6 +21,7 @@ interface Overview {
 }
 
 export default function ProductDetail() {
+  useUoms() // keep unit names / decimal rules fresh after the super admin changes them
   const { id } = useParams()
   return <ProductOverview id={id} />
 }
@@ -58,7 +60,7 @@ export function ProductOverview({ id, hideBack }: { id?: string | number; hideBa
         </label>
       </div>
       <Card className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50/70"><tr>{[ts('When'), ts('Type'), ts('Location'), ts('Change'), ts('Reserved Δ'), ts('On hand after'), ts('By'), ts('Ref')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
+        <table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50/70"><tr>{[ts('When'), ts('Type'), ts('Location'), ts('Change'), ts('Reserved Δ'), ts('On hand after'), ts('Approved by'), ts('Ref')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">{movements.map((m) => <tr key={m.id}><td className="td whitespace-nowrap text-slate-600">{fmtDate(m.at)}</td><td className="td"><Badge tone={m.type === 'inbound' || m.type === 'transfer_in' ? 'green' : m.type === 'outbound' ? 'indigo' : 'gray'}>{moveLabel(m.type)}</Badge></td><td className="td">{m.location}</td><td className={`td font-medium ${m.onHandDelta < 0 ? 'text-red-600' : m.onHandDelta > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{m.onHandDelta > 0 ? '+' : ''}{fmt(m.onHandDelta)}</td><td className="td text-slate-500">{m.reservedDelta ? (m.reservedDelta > 0 ? '+' : '') + fmt(m.reservedDelta) : '-'}</td><td className="td">{fmt(m.onHandAfter)}</td><td className="td text-slate-600">{m.user}</td><td className="td text-xs text-slate-500">{movementRef(m)}</td></tr>)}</tbody></table>
         {movements.length === 0 && <Empty>{loc ? t('No movements at this location yet.') : t('No movements yet.')}</Empty>}
       </Card>

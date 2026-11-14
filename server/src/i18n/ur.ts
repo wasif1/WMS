@@ -185,5 +185,12 @@ export const ur: Record<string, string> = {
  "converted": "تبدیل شدہ",
  "saved": "محفوظ شدہ",
  "confirmed": "تصدیق شدہ",
- "counting": "گنتی جاری"
+ "counting": "گنتی جاری",
+ "\"{unit}\" is not a unit of measure you can use. Pick one from the list, or ask the super admin to add it.": "\"{unit}\" ناپ کی ایسی اکائی نہیں جو آپ استعمال کر سکیں۔ فہرست میں سے منتخب کریں، یا سپر ایڈمن سے اسے شامل کرنے کا کہیں۔",
+ "A unit called \"{name}\" already exists.": "\"{name}\" نام کی اکائی پہلے سے موجود ہے۔",
+ "Unit": "اکائی",
+ "The built-in units cannot be changed or deleted.": "پہلے سے موجود اکائیاں تبدیل یا حذف نہیں کی جا سکتیں۔",
+ "\"{unit}\" is used by {n} product(s), so it cannot be deleted. Change those products to another unit first.": "\"{unit}\" {n} پروڈکٹ(س) میں استعمال ہو رہی ہے، اس لیے حذف نہیں ہو سکتی۔ پہلے ان پروڈکٹس کی اکائی تبدیل کریں۔",
+ "Short name": "مختصر نام",
+ "Allow decimals": "اعشاریہ کی اجازت",
 }

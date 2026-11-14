@@ -46,7 +46,7 @@ export interface Product extends ApprovalInfo {
   size?: string
   weight?: string // free text as measured, e.g. "500g", "1.5 kg"
   caseSize?: number // units per case/box; optional (some products arrive loose)
-  uom: 'unit' | 'kg' | 'm' | 'bundle' // how this product is actually measured
+  uom: string // key of a built-in or super-admin unit of measure (see uoms.ts)
   reorderLevel: number
   active: boolean
   createdAt: string
