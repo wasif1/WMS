@@ -15,8 +15,8 @@ import type { Product } from '@/lib/types'
 
 interface Overview {
   product: Product
-  totals: { onHand: number; reserved: number; available: number; boxes: number | null }
-  byLocation: { locationId: number; location: string; onHand: number; reserved: number; available: number; boxes: number | null }[]
+  totals: { onHand: number; reserved: number; available: number; boxes: number | null; inTransit: number }
+  byLocation: { locationId: number; location: string; onHand: number; reserved: number; available: number; boxes: number | null; inTransit: number; inTransitFrom: string[] }[]
   movements: any[]
 }
 
@@ -41,11 +41,11 @@ export function ProductOverview({ id, hideBack }: { id?: string | number; hideBa
       <h2 className="mb-3 text-sm font-semibold">{t("Availability by location")}</h2>
       <Card className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-100">
-          <thead className="bg-slate-50/70"><tr>{[ts('Location'), ts('On hand'), ts('Reserved'), ts('Total units available'), ts('Total boxes')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
+          <thead className="bg-slate-50/70"><tr>{[ts('Location'), ts('Total inventory'), ts('Reserved'), ts('In Transit'), ts('On hand'), ts('Total boxes')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
           <tbody className="divide-y divide-slate-100">
-            {byLocation.map((l) => <tr key={l.locationId}><td className="td font-medium">{l.location}</td><td className="td">{fmt(l.onHand)}</td><td className="td">{fmt(l.reserved)}</td><td className="td font-semibold">{fmt(l.available)}</td><td className="td">{l.boxes === null ? <span className="text-slate-400">n/a</span> : fmt(l.boxes)}</td></tr>)}
+            {byLocation.map((l) => <tr key={l.locationId}><td className="td font-medium">{l.location}</td><td className="td">{fmt(l.onHand)}</td><td className="td">{fmt(l.reserved)}</td><td className="td">{l.inTransit > 0 ? <span className="font-semibold text-sky-700">{fmt(l.inTransit)}<span className="block text-xs font-normal text-slate-500">{t('from {place}', { place: l.inTransitFrom.join(', ') })}</span></span> : <span className="text-slate-400">0</span>}</td><td className="td font-semibold">{fmt(l.available)}</td><td className="td">{l.boxes === null ? <span className="text-slate-400">n/a</span> : fmt(l.boxes)}</td></tr>)}
           </tbody>
-          {byLocation.length > 0 && <tfoot className="border-t-2 border-slate-200 bg-slate-50/70"><tr><td className="td font-semibold">{t("All locations")}</td><td className="td font-semibold">{fmt(tot.onHand)}</td><td className="td font-semibold">{fmt(tot.reserved)}</td><td className="td font-bold">{fmt(tot.available)}</td><td className="td font-bold">{tot.boxes === null ? <span className="font-normal text-slate-400">n/a</span> : fmt(tot.boxes)}</td></tr></tfoot>}
+          {byLocation.length > 0 && <tfoot className="border-t-2 border-slate-200 bg-slate-50/70"><tr><td className="td font-semibold">{t("All locations")}</td><td className="td font-semibold">{fmt(tot.onHand)}</td><td className="td font-semibold">{fmt(tot.reserved)}</td><td className="td font-bold">{tot.inTransit > 0 ? <span className="text-sky-700">{fmt(tot.inTransit)}</span> : <span className="font-normal text-slate-400">0</span>}</td><td className="td font-bold">{fmt(tot.available)}</td><td className="td font-bold">{tot.boxes === null ? <span className="font-normal text-slate-400">n/a</span> : fmt(tot.boxes)}</td></tr></tfoot>}
         </table>
         {byLocation.length === 0 && <Empty>{t("No stock at any location.")}</Empty>}
       </Card>
@@ -60,8 +60,8 @@ export function ProductOverview({ id, hideBack }: { id?: string | number; hideBa
         </label>
       </div>
       <Card className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50/70"><tr>{[ts('When'), ts('Type'), ts('Location'), ts('Change'), ts('Reserved Δ'), ts('On hand after'), ts('Approved by'), ts('Ref')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100">{movements.map((m) => <tr key={m.id}><td className="td whitespace-nowrap text-slate-600">{fmtDate(m.at)}</td><td className="td"><Badge tone={m.type === 'inbound' || m.type === 'transfer_in' ? 'green' : m.type === 'outbound' ? 'indigo' : 'gray'}>{moveLabel(m.type)}</Badge></td><td className="td">{m.location}</td><td className={`td font-medium ${m.onHandDelta < 0 ? 'text-red-600' : m.onHandDelta > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{m.onHandDelta > 0 ? '+' : ''}{fmt(m.onHandDelta)}</td><td className="td text-slate-500">{m.reservedDelta ? (m.reservedDelta > 0 ? '+' : '') + fmt(m.reservedDelta) : '-'}</td><td className="td">{fmt(m.onHandAfter)}</td><td className="td text-slate-600">{m.user}</td><td className="td text-xs text-slate-500">{movementRef(m)}</td></tr>)}</tbody></table>
+        <table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50/70"><tr>{[ts('When'), ts('Type'), ts('Location'), ts('Change'), ts('Reserved Δ'), ts('On hand after'), ts('Action by'), ts('Approved by'), ts('Ref')].map((h) => <th key={h} className="th">{t(h)}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{movements.map((m) => <tr key={m.id}><td className="td whitespace-nowrap text-slate-600">{fmtDate(m.at)}</td><td className="td"><Badge tone={m.type === 'inbound' || m.type === 'transfer_in' ? 'green' : m.type === 'outbound' ? 'indigo' : 'gray'}>{moveLabel(m.type)}</Badge></td><td className="td">{m.location}</td><td className={`td font-medium ${m.onHandDelta < 0 ? 'text-red-600' : m.onHandDelta > 0 ? 'text-emerald-600' : 'text-slate-400'}`}><span dir="ltr">{m.onHandDelta > 0 ? '+' : ''}{fmt(m.onHandDelta)}</span></td><td className="td text-slate-500"><span dir="ltr">{m.reservedDelta ? (m.reservedDelta > 0 ? '+' : '') + fmt(m.reservedDelta) : '-'}</span></td><td className="td">{fmt(m.onHandAfter)}</td><td className="td text-slate-700">{m.actionBy ?? m.user}</td><td className="td text-slate-600">{m.user}</td><td className="td text-xs text-slate-500">{movementRef(m)}</td></tr>)}</tbody></table>
         {movements.length === 0 && <Empty>{loc ? t('No movements at this location yet.') : t('No movements yet.')}</Empty>}
       </Card>
     </>

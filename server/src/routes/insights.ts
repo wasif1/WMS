@@ -115,14 +115,39 @@ export function insightRoutes(ctx: Ctx, inv: Inventory) {
     const stock = (ctx.db.stock.all() as Stock[]).filter((s) => s.productId === id)
     const moves = (ctx.db.movements.all() as Movement[]).filter((m) => m.productId === id && (!q.locationId || m.locationId === q.locationId)).reverse().slice(0, 200)
     const refName = (m: Movement) => (m.refType === 'audit' ? A.get(m.refId ?? -1) : undefined)
-    const rowsByLoc = stock.map((s) => ({ locationId: s.locationId, location: L.get(s.locationId)?.name, onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null }))
+    // Units on the way: counted at the DESTINATION while the transfer is in transit, and gone again once it is received.
+    const transit = new Map<number, { qty: number; from: Set<string> }>()
+    for (const o of ctx.db.transfer_orders.all() as any[]) {
+      if (o.status !== 'in_transit') continue
+      for (const l of o.lines as { productId: number; qty: number }[]) {
+        if (l.productId !== id) continue
+        const e = transit.get(o.toLocationId) ?? { qty: 0, from: new Set<string>() }
+        e.qty += l.qty; e.from.add(L.get(o.fromLocationId)?.name ?? ''); transit.set(o.toLocationId, e)
+      }
+    }
+    const stockLocs = new Set(stock.map((s) => s.locationId))
+    const base = [...stock, ...[...transit.keys()].filter((lid) => !stockLocs.has(lid)).map((lid) => ({ locationId: lid, onHand: 0, reserved: 0 }))]
+    const rowsByLoc = base.map((s) => ({ locationId: s.locationId, location: L.get(s.locationId)?.name, onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null, inTransit: transit.get(s.locationId)?.qty ?? 0, inTransitFrom: [...(transit.get(s.locationId)?.from ?? [])] }))
     const totalAvail = rowsByLoc.reduce((a, r2) => a + r2.available, 0)
+    // "Action by": who actually did it (entered / submitted / sent / received / confirmed / closed). "Approved by" stays the person whose click posted the movement.
+    const byId = <T extends { id: number }>(rows: unknown) => new Map((rows as T[]).map((o) => [o.id, o as any]))
+    const ORD = { inbound: byId(ctx.db.inbound_orders.all()), transfer: byId(ctx.db.transfer_orders.all()), reserve: byId(ctx.db.reserve_orders.all()), outbound: byId(ctx.db.outbound_orders.all()), adjustment: byId(ctx.db.adjustments.all()), audit: byId(ctx.db.audits.all()) } as Record<string, Map<number, any>>
+    const actionBy = (m: Movement): string | undefined => {
+      const o = ORD[m.refType ?? '']?.get(m.refId ?? -1)
+      const who = o && (m.refType === 'inbound' ? o.enteredBy
+        : m.refType === 'transfer' ? (m.type === 'transfer_in' ? o.receivedBy : o.submittedBy ?? o.createdBy)
+        : m.refType === 'reserve' ? (m.type === 'unreserve' ? o.closedBy : o.createdBy)
+        : m.refType === 'outbound' ? (m.type === 'outbound' ? o.confirmedBy : m.type === 'unreserve' ? o.closedBy : o.createdBy)
+        : m.refType === 'adjustment' ? o.by
+        : m.refType === 'audit' ? o.submittedBy ?? o.createdBy : undefined)
+      return who?.name ?? U.get(m.userId)
+    }
     res.json({
       product: p,
       // the full pipeline lives in this table (the summary cards were removed on request)
       byLocation: rowsByLoc,
-      totals: { onHand: rowsByLoc.reduce((a, r2) => a + r2.onHand, 0), reserved: rowsByLoc.reduce((a, r2) => a + r2.reserved, 0), available: totalAvail, boxes: p.caseSize ? Math.ceil(totalAvail / p.caseSize) : null },
-      movements: moves.map((m) => ({ ...m, location: L.get(m.locationId)?.name, user: U.get(m.userId), refName: refName(m) })),
+      totals: { onHand: rowsByLoc.reduce((a, r2) => a + r2.onHand, 0), reserved: rowsByLoc.reduce((a, r2) => a + r2.reserved, 0), available: totalAvail, boxes: p.caseSize ? Math.ceil(totalAvail / p.caseSize) : null, inTransit: rowsByLoc.reduce((a, r2) => a + r2.inTransit, 0) },
+      movements: moves.map((m) => ({ ...m, location: L.get(m.locationId)?.name, user: U.get(m.userId), actionBy: actionBy(m), refName: refName(m) })),
     })
   }))
 

@@ -322,10 +322,22 @@ R('GET', '/dashboard', ['dashboard.view'], (_u, _b, _m, q) => {
 R('GET', '/products/(\\d+)/overview', ['products.view'], (_u, _b, m, q) => {
   const p = find(db.products.filter(approved), m[1], 'Product'); const L = (id: number) => db.locations.find((l: A) => l.id === id)?.name, U = (id: number) => db.users.find((u: A) => u.id === id)?.name
   const A = new Map<number, string>(db.audits.map((a: A) => [a.id, a.name])); const ref = (x: A) => (x.refType === 'audit' ? A.get(x.refId) : undefined)
-  const rowsL = db.stock.filter((s: A) => s.productId === p.id).map((s: A) => ({ locationId: s.locationId, location: L(s.locationId), onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null }))
+  // units on the way: counted at the DESTINATION while the transfer is in transit
+  const transit = new Map<number, { qty: number; from: Set<string> }>()
+  for (const o of db.transfers.filter((x: A) => x.status === 'in_transit')) for (const l of o.lines) if (l.productId === p.id) { const e = transit.get(o.toLocationId) ?? { qty: 0, from: new Set<string>() }; e.qty += l.qty; e.from.add(L(o.fromLocationId) ?? ''); transit.set(o.toLocationId, e) }
+  const stk = db.stock.filter((s: A) => s.productId === p.id); const have = new Set(stk.map((s: A) => s.locationId))
+  const base = [...stk, ...[...transit.keys()].filter((lid) => !have.has(lid)).map((lid) => ({ locationId: lid, onHand: 0, reserved: 0 }))]
+  const rowsL = base.map((s: A) => ({ locationId: s.locationId, location: L(s.locationId), onHand: s.onHand, reserved: s.reserved, available: s.onHand - s.reserved, boxes: p.caseSize ? Math.ceil((s.onHand - s.reserved) / p.caseSize) : null, inTransit: transit.get(s.locationId)?.qty ?? 0, inTransitFrom: [...(transit.get(s.locationId)?.from ?? [])] }))
   const avail = rowsL.reduce((a: number, r: A) => a + r.available, 0)
-  return { product: p, byLocation: rowsL, totals: { onHand: rowsL.reduce((a: number, r: A) => a + r.onHand, 0), reserved: rowsL.reduce((a: number, r: A) => a + r.reserved, 0), available: avail, boxes: p.caseSize ? Math.ceil(avail / p.caseSize) : null },
-    movements: db.movements.filter((x: A) => x.productId === p.id && (!q.locationId || x.locationId === +q.locationId)).slice().reverse().slice(0, 200).map((x: A) => ({ ...x, location: L(x.locationId), user: U(x.userId), refName: ref(x) })) }
+  // "Action by": who actually did it; "Approved by" stays the person whose click posted the movement
+  const ORD: Record<string, A[]> = { inbound: db.inbound, transfer: db.transfers, reserve: db.reserves, outbound: db.outbound, adjustment: db.adjustments, audit: db.audits }
+  const actionBy = (x: A) => {
+    const o = ORD[x.refType]?.find((r: A) => r.id === x.refId)
+    const who = o && (x.refType === 'inbound' ? o.enteredBy : x.refType === 'transfer' ? (x.type === 'transfer_in' ? o.receivedBy : o.submittedBy ?? o.createdBy) : x.refType === 'reserve' ? (x.type === 'unreserve' ? o.closedBy : o.createdBy) : x.refType === 'outbound' ? (x.type === 'outbound' ? o.confirmedBy : x.type === 'unreserve' ? o.closedBy : o.createdBy) : x.refType === 'adjustment' ? o.by : x.refType === 'audit' ? o.submittedBy ?? o.createdBy : undefined)
+    return who?.name ?? U(x.userId)
+  }
+  return { product: p, byLocation: rowsL, totals: { onHand: rowsL.reduce((a: number, r: A) => a + r.onHand, 0), reserved: rowsL.reduce((a: number, r: A) => a + r.reserved, 0), available: avail, boxes: p.caseSize ? Math.ceil(avail / p.caseSize) : null, inTransit: rowsL.reduce((a: number, r: A) => a + r.inTransit, 0) },
+    movements: db.movements.filter((x: A) => x.productId === p.id && (!q.locationId || x.locationId === +q.locationId)).slice().reverse().slice(0, 200).map((x: A) => ({ ...x, location: L(x.locationId), user: U(x.userId), actionBy: actionBy(x), refName: ref(x) })) }
 })
 R('GET', '/reports/inventory', ['reports.inventory'], (_u, _b, _m, q) => {
   const rows = db.stock.filter((s: A) => !q.locationId || s.locationId === +q.locationId).map((s: A) => { const p = db.products.find((x: A) => x.id === s.productId); return { SKU: p.sku, Product: p.name ?? p.sku, Variation: variation(p), Weight: p.weight ?? '', Location: db.locations.find((l: A) => l.id === s.locationId)?.name, 'Case pack': p.caseSize ?? '', UOM: p.uom, 'On hand': s.onHand, Reserved: s.reserved, Available: s.onHand - s.reserved, Boxes: p.caseSize ? Math.ceil(s.onHand / p.caseSize) : '' } })
